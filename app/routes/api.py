@@ -47,3 +47,15 @@ def history(metric_type: str):
 @bp.get("/metrics")
 def metrics_list():
     return jsonify(METRIC_META)
+
+
+@bp.get("/system")
+def system_info():
+    import psutil
+    vm = psutil.virtual_memory()
+    du = psutil.disk_usage("/")
+    return jsonify({
+        "ram_total_gb":  round(vm.total  / 1_073_741_824, 1),
+        "disk_total_gb": round(du.total  / 1_073_741_824, 1),
+        "cpu_cores":     psutil.cpu_count(logical=True),
+    })

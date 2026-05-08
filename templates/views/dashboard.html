@@ -1,20 +1,14 @@
-<div class="dashboard-grid">
+﻿<div class="dashboard-grid">
 
-    <!-- Network widget (4x2) -->
-    <div onclick="navigateTo('detail','net_rx')" class="m3-widget widget-4x2 bg-indigo-50" id="w-net_rx">
-        <div class="flex justify-between items-start">
-            <div>
-                <span class="widget-label">Netzwerk</span>
-                <h2 class="text-2xl font-bold mt-1">
-                    ↓ <span id="widget-net_rx-value">–</span> MB/s &nbsp;
-                    ↑ <span id="widget-net_tx-value">–</span> <span class="text-xs font-normal opacity-40">MB/s</span>
-                </h2>
-            </div>
-            <div class="p-2 bg-white/60 rounded-xl shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6750a4" stroke-width="2"><path d="M12 2v20"/><path d="m19 15-7 7-7-7"/></svg>
-            </div>
+    <!-- Network widget (2x2) -->
+    <div onclick="navigateTo('detail','net_rx')" class="m3-widget widget-2x2 bg-indigo-50" id="w-net_rx">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label">Netzwerk</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6750a4" stroke-width="2"><path d="M12 2v20"/><path d="m19 15-7 7-7-7"/></svg>
         </div>
-        <div class="chart-container">
+        <div class="text-2xl font-bold text-indigo-900">↓ <span id="widget-net_rx-value">–</span></div>
+        <div class="text-xs opacity-50 font-medium mt-0.5">↑ <span id="widget-net_tx-value">–</span> <span class="opacity-60">MB/s</span></div>
+        <div class="chart-container" style="flex:1;min-height:0;margin-top:6px;">
             <canvas id="chart-net-mini"></canvas>
         </div>
     </div>
@@ -63,3 +57,4 @@
     </div>
 
 </div>
+

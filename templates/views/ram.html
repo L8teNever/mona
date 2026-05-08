@@ -13,10 +13,12 @@
         <button class="time-chip" onclick="loadRange('24h', this)">24 Std.</button>
         <button class="time-chip" onclick="loadRange('7d', this)">7 Tage</button>
         <button class="time-chip" onclick="loadRange('30d', this)">30 Tage</button>
+        <button class="time-chip range-toggle-btn" onclick="toggleRangePicker(this)" aria-expanded="false" title="Benutzerdefinierter Zeitraum">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </button>
     </div>
 </div>
-<div class="custom-range-row">
-    <span class="widget-label" style="white-space:nowrap">Zeitraum</span>
+<div class="custom-range-row" id="range-picker">
     <input type="datetime-local" id="range-from" class="datetime-input">
     <span class="range-sep">–</span>
     <input type="datetime-local" id="range-to" class="datetime-input">
@@ -25,4 +27,5 @@
 <div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm" style="height:450px;">
     <canvas id="chart-detail" data-metric="ram"></canvas>
 </div>
+
 

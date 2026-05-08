@@ -190,6 +190,22 @@ function _setBar(id, v, max) { const el = document.getElementById(id); if (el) e
 
 // ── Detail ────────────────────────────────────────────────────────────────────
 
+let _systemInfo = null;
+
+async function _fetchSystemInfo() {
+    try { _systemInfo = await (await fetch('/api/system')).json(); }
+    catch { _systemInfo = null; }
+}
+
+function toggleRangePicker(btn) {
+    const picker = document.getElementById('range-picker');
+    if (!picker) return;
+    const opening = !picker.classList.contains('open');
+    picker.classList.toggle('open', opening);
+    btn.classList.toggle('active', opening);
+    btn.setAttribute('aria-expanded', opening);
+}
+
 function _toDatetimeLocal(date) {
     const p = n => String(n).padStart(2, '0');
     return `${date.getFullYear()}-${p(date.getMonth()+1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
@@ -205,6 +221,8 @@ function _initDetail(metricType) {
     const to   = document.getElementById('range-to');
     if (from) from.value = _toDatetimeLocal(new Date(now.getTime() - 86400000));
     if (to)   to.value   = _toDatetimeLocal(now);
+
+    if (!_systemInfo) _fetchSystemInfo().then(_updateLiveValue);
 
     loadRange('1h', document.querySelector('.time-chip.active'));
     _updateLiveValue();
@@ -355,10 +373,25 @@ async function _updateLiveValue() {
     try {
         const data = await (await fetch('/api/current')).json();
         const m    = data.metrics[_currentMetric];
-        if (m) {
-            const unit = (METRIC_META[_currentMetric] || {}).unit || '';
-            el.textContent = 'Live: ' + (m.value === -1 ? 'N/A' : m.value.toFixed(2) + ' ' + unit);
+        if (!m) return;
+        const unit = (METRIC_META[_currentMetric] || {}).unit || '';
+        let text;
+        if (m.value === -1) {
+            text = 'N/A';
+        } else if (_currentMetric === 'ram' && _systemInfo?.ram_total_gb) {
+            const used = (m.value / 100 * _systemInfo.ram_total_gb).toFixed(1);
+            text = `${used} GB / ${_systemInfo.ram_total_gb} GB (${m.value.toFixed(1)}%)`;
+        } else if (_currentMetric === 'disk' && _systemInfo?.disk_total_gb) {
+            text = `${m.value.toFixed(1)} GB / ${_systemInfo.disk_total_gb} GB`;
+        } else if (_currentMetric === 'cpu' && _systemInfo?.cpu_cores) {
+            text = `${m.value.toFixed(1)}%  —  ${_systemInfo.cpu_cores} Kerne`;
+        } else if (_currentMetric === 'net_rx') {
+            const tx = data.metrics['net_tx'];
+            text = `↓ ${m.value.toFixed(3)} MB/s  ↑ ${tx ? tx.value.toFixed(3) : '–'} MB/s`;
+        } else {
+            text = `${m.value.toFixed(2)} ${unit}`;
         }
+        el.textContent = text;
     } catch { el.textContent = ''; }
 }
 
