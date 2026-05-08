@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from app import database
 from app.config import RANGE_SECONDS
+import app.widgets.containers as _containers_mod
 
 bp = Blueprint("docker_api", __name__)
 
@@ -32,3 +33,15 @@ def docker_history(container_name: str):
 @bp.get("/containers")
 def list_containers():
     return jsonify({"containers": database.get_docker_container_names()})
+
+
+@bp.get("/status")
+def docker_status():
+    client = _containers_mod._ensure_client()
+    if client is not None:
+        try:
+            names = [c.name for c in client.containers.list()]
+            return jsonify({"available": True, "containers": names})
+        except Exception as e:
+            return jsonify({"available": False, "error": str(e)})
+    return jsonify({"available": False, "error": _containers_mod.last_error})

@@ -3,17 +3,21 @@ import time
 METRICS = []
 
 _client = None
+last_error: str = ""
 
 
 def _ensure_client():
-    global _client
+    global _client, last_error
     if _client is not None:
         return _client
     try:
         import docker
         _client = docker.from_env()
+        _client.ping()  # actually test the connection
+        last_error = ""
         return _client
-    except Exception:
+    except Exception as e:
+        last_error = str(e)
         return None
 
 
@@ -49,8 +53,9 @@ def collect() -> list:
                 rows.append((ts, 'docker_ram', round(ram_mb, 2), 'MB', c.name))
             except Exception:
                 pass
-    except Exception:
+    except Exception as e:
         global _client
+        last_error = str(e)
         _client = None  # reset so we reconnect next time
 
     return rows
