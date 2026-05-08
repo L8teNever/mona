@@ -1,0 +1,103 @@
+﻿<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div class="flex items-center gap-4">
+        <button onclick="navigateTo('dashboard')" class="back-btn-icon shadow-sm" aria-label="Zurück">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div>
+            <h2 class="text-xl md:text-3xl font-bold">Cloudflare Analytics</h2>
+            {% if cf_zones %}<p class="text-sm opacity-50 mt-0.5">{{ cf_zones | map(attribute='name') | join(', ') }}</p>{% endif %}
+        </div>
+    </div>
+    <button onclick="showCfSettings()" class="time-chip" style="display:flex;align-items:center;gap:5px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        API
+    </button>
+</div>
+
+{% if not cf_configured %}
+<div style="max-width:520px;">
+    <div class="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm">
+        <p style="font-size:0.85rem;opacity:0.55;margin-bottom:20px;line-height:1.65;">
+            Erstelle ein <strong>API Token</strong> unter <code>cloudflare.com → My Profile → API Tokens</code>
+            mit der Berechtigung <strong>Zone → Analytics → Read</strong>.<br>
+            Die <strong>Zone ID</strong> findest du unter <code>cloudflare.com → deine Domain → Overview</code> (rechte Spalte).
+        </p>
+        <label class="widget-label" style="display:block;margin-bottom:4px;">API Token</label>
+        <input type="password" id="cf-token" placeholder="Dein Cloudflare API Token" class="datetime-input" style="width:100%;margin-bottom:12px;">
+        <label class="widget-label" style="display:block;margin-bottom:4px;">Zone ID(s) <span style="font-weight:400;opacity:0.6;text-transform:none;">(kommagetrennt für mehrere Domains)</span></label>
+        <input type="text" id="cf-zone-ids" placeholder="abc123def456, ..." class="datetime-input" style="width:100%;margin-bottom:20px;">
+        <button onclick="saveCfConfig()" class="range-apply-btn" style="width:100%;padding:10px 18px;font-size:14px;">Speichern &amp; Verbinden</button>
+        <p id="cf-setup-msg" style="font-size:12px;margin-top:10px;min-height:18px;"></p>
+    </div>
+</div>
+
+{% else %}
+
+{% if cf_zones | length > 1 %}
+<div class="time-chips mb-4">
+    {% for zone in cf_zones %}
+    <button class="time-chip {% if loop.first %}active{% endif %}" data-cf-zone="{{ zone.id }}" onclick="selectCfZone('{{ zone.id }}', this)">{{ zone.name }}</button>
+    {% endfor %}
+</div>
+{% else %}
+<div id="cf-single-zone" data-cf-zone="{{ cf_zones[0].id }}" style="display:none;"></div>
+{% endif %}
+
+<!-- Summary cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:12px;margin-bottom:16px;">
+    <div class="m3-widget pop" style="background:#fff7ed;border:1px solid #fed7aa;">
+        <span class="widget-label" style="color:#9a3412;">Anfragen heute</span>
+        <div class="text-2xl font-bold mt-1 text-orange-900" id="cf-req-today">–</div>
+    </div>
+    <div class="m3-widget pop" style="background:#f0f9ff;border:1px solid #bae6fd;">
+        <span class="widget-label" style="color:#0369a1;">Traffic heute</span>
+        <div class="text-2xl font-bold mt-1 text-sky-900" id="cf-bytes-today">–</div>
+    </div>
+    <div class="m3-widget pop" style="background:#f0fdf4;border:1px solid #bbf7d0;">
+        <span class="widget-label" style="color:#166534;">Besucher heute</span>
+        <div class="text-2xl font-bold mt-1 text-green-900" id="cf-visitors-today">–</div>
+    </div>
+    <div class="m3-widget pop" style="background:#fef2f2;border:1px solid #fecaca;">
+        <span class="widget-label" style="color:#991b1b;">Bedrohungen</span>
+        <div class="text-2xl font-bold mt-1 text-red-900" id="cf-threats-today">–</div>
+    </div>
+</div>
+
+<!-- Time range -->
+<div class="time-chips" style="margin-bottom:12px;">
+    <button class="time-chip active" onclick="loadCfRange('24h', this)">24 Std.</button>
+    <button class="time-chip" onclick="loadCfRange('7d', this)">7 Tage</button>
+    <button class="time-chip" onclick="loadCfRange('30d', this)">30 Tage</button>
+</div>
+
+<!-- Traffic chart -->
+<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm mb-4" style="height:280px;">
+    <p class="widget-label mb-3">Anfragen pro Stunde</p>
+    <div style="height:210px;position:relative;">
+        <canvas id="chart-cf-requests"></canvas>
+    </div>
+</div>
+
+<!-- Top URLs -->
+<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <p class="widget-label" style="margin:0;">Top URLs (letzte 24 Std.)</p>
+        <p style="font-size:11px;opacity:0.35;margin:0;">Erfordert Cloudflare Pro+</p>
+    </div>
+    <div id="cf-top-urls-list"><p style="opacity:0.4;font-size:0.85rem;">Lade...</p></div>
+</div>
+{% endif %}
+
+<!-- Settings modal (always in DOM) -->
+<div id="cf-settings-overlay" onclick="if(event.target===this)hideCfSettings()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:500;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:24px;padding:32px;max-width:480px;width:90%;">
+        <h3 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;">Cloudflare API Einstellungen</h3>
+        <p style="font-size:0.8rem;opacity:0.5;margin-bottom:20px;line-height:1.5;">Token mit Zone → Analytics → Read. Zone ID auf der Domain-Übersichtsseite (rechte Spalte).</p>
+        <label class="widget-label" style="display:block;margin-bottom:4px;">API Token</label>
+        <input type="password" id="cf-token" placeholder="Cloudflare API Token" class="datetime-input" style="width:100%;margin-bottom:12px;">
+        <label class="widget-label" style="display:block;margin-bottom:4px;">Zone ID(s) <span style="font-weight:400;opacity:0.6;text-transform:none;">(kommagetrennt)</span></label>
+        <input type="text" id="cf-zone-ids" placeholder="abc123, def456" class="datetime-input" style="width:100%;margin-bottom:20px;">
+        <button onclick="saveCfConfig()" class="range-apply-btn" style="width:100%;padding:10px;">Speichern &amp; Verbinden</button>
+        <p id="cf-setup-msg" style="font-size:12px;margin-top:10px;min-height:18px;"></p>
+    </div>
+</div>

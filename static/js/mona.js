@@ -76,14 +76,17 @@ let _dashInterval             = null;
 let _detailIntervals          = [];
 let _dockerInterval           = null;
 let _dockerContainerIntervals = [];
+let _cfInterval               = null;
 let _netMini                  = null;
 let _detailChart              = null;
 let _dockerCpuChart           = null;
 let _dockerRamChart           = null;
+let _cfReqChart               = null;
 
 function _cleanupAll() {
     if (_dashInterval)   { clearInterval(_dashInterval);   _dashInterval = null; }
     if (_dockerInterval) { clearInterval(_dockerInterval); _dockerInterval = null; }
+    if (_cfInterval)     { clearInterval(_cfInterval);     _cfInterval = null; }
     _detailIntervals.forEach(clearInterval);
     _detailIntervals = [];
     _dockerContainerIntervals.forEach(clearInterval);
@@ -92,8 +95,10 @@ function _cleanupAll() {
     if (_detailChart)    { _detailChart.destroy();    _detailChart = null; }
     if (_dockerCpuChart) { _dockerCpuChart.destroy(); _dockerCpuChart = null; }
     if (_dockerRamChart) { _dockerRamChart.destroy(); _dockerRamChart = null; }
+    if (_cfReqChart)     { _cfReqChart.destroy();     _cfReqChart = null; }
     _currentMetric = null;
     _currentDockerContainer = null;
+    _cfZoneId = null;
 }
 
 async function _doNavigate(view, metricType) {
@@ -101,27 +106,25 @@ async function _doNavigate(view, metricType) {
 
     const container = document.getElementById('view-container');
 
-    // slide out
     container.style.transition = 'opacity 0.18s ease-in, transform 0.2s ease-in';
     container.style.opacity    = '0';
     container.style.transform  = 'translateY(-10px)';
     await new Promise(r => setTimeout(r, 210));
 
-    // fetch & inject
     let url;
     if (view === 'dashboard')             url = '/view/dashboard';
     else if (view === 'docker')           url = '/view/docker';
     else if (view === 'docker-container') url = `/view/docker-container/${encodeURIComponent(metricType)}`;
+    else if (view === 'cloudflare')       url = '/view/cloudflare';
     else                                  url = `/view/detail/${metricType}`;
     try {
         container.innerHTML = await (await fetch(url)).text();
     } catch { return; }
 
-    // slide in
     container.style.transition = 'none';
     container.style.opacity    = '0';
     container.style.transform  = 'translateY(24px)';
-    container.offsetHeight; // force reflow
+    container.offsetHeight;
     container.style.transition = 'opacity 0.38s cubic-bezier(0.05,0.7,0.1,1), transform 0.38s cubic-bezier(0.05,0.7,0.1,1)';
     container.style.opacity    = '1';
     container.style.transform  = 'translateY(0)';
@@ -129,6 +132,7 @@ async function _doNavigate(view, metricType) {
     if (view === 'dashboard')             _initDashboard();
     else if (view === 'docker')           _initDockerOverview();
     else if (view === 'docker-container') _initDockerContainer(metricType);
+    else if (view === 'cloudflare')       _initCloudflare();
     else                                  _initDetail(metricType);
 }
 
@@ -137,6 +141,7 @@ async function navigateTo(view, metricType) {
     if (view === 'dashboard')             newUrl = '/';
     else if (view === 'docker')           newUrl = '/docker';
     else if (view === 'docker-container') newUrl = `/docker/${encodeURIComponent(metricType)}`;
+    else if (view === 'cloudflare')       newUrl = '/cloudflare';
     else                                  newUrl = `/${metricType}`;
     history.pushState({ view, metricType: metricType || null }, '', newUrl);
     await _doNavigate(view, metricType);
@@ -159,8 +164,7 @@ function _initDashboard() {
                 labels:   Array(20).fill(''),
                 datasets: [{
                     data: Array(20).fill(0),
-                    borderColor: '#6750a4',
-                    backgroundColor: '#6750a41A',
+                    borderColor: '#6750a4', backgroundColor: '#6750a41A',
                     fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0,
                 }]
             },
@@ -182,7 +186,6 @@ async function _refreshDashboard() {
     catch { return; }
 
     const m = data.metrics || {};
-
     _setVal('widget-net_rx-value', m.net_rx ? m.net_rx.value.toFixed(3) : '–');
     _setVal('widget-net_tx-value', m.net_tx ? m.net_tx.value.toFixed(3) : '–');
     _setVal('widget-cpu-value',    m.cpu    ? m.cpu.value.toFixed(1)    : '–');
@@ -202,7 +205,6 @@ async function _refreshDashboard() {
         _netMini.update('none');
     }
 
-    // Docker widget
     try {
         const dd = await (await fetch('/api/docker/current')).json();
         const containers = dd.containers || [];
@@ -210,6 +212,19 @@ async function _refreshDashboard() {
         const namesEl = document.getElementById('widget-docker-names');
         if (namesEl) namesEl.textContent = containers.map(c => c.name).join(' · ') || '–';
     } catch { /* docker unavailable */ }
+
+    try {
+        const cf = await (await fetch('/api/cf/summary')).json();
+        if (cf.configured && cf.zones && cf.zones[0]) {
+            const z = cf.zones[0];
+            const fmtN = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/1e3)+'K' : String(n);
+            const fmtB = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB' : Math.round(b/1e3)+' KB';
+            _setVal('widget-cf-requests', fmtN(z.requests));
+            _setVal('widget-cf-traffic',  fmtB(z.bytes));
+        } else if (!cf.configured) {
+            _setVal('widget-cf-traffic', 'nicht eingerichtet');
+        }
+    } catch { /* cf unavailable */ }
 }
 
 function _setVal(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
@@ -286,28 +301,18 @@ async function loadRange(range, btn) {
         data: {
             labels,
             datasets: [{
-                data: values,
-                borderColor: color,
-                backgroundColor: color + '1A',
+                data: values, borderColor: color, backgroundColor: color + '1A',
                 fill: true, tension: 0.4, borderWidth: 3,
-                pointRadius: values.length < 60 ? 3 : 0,
-                pointHoverRadius: 6,
+                pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6,
             }]
         },
         options: {
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    mode: 'index', intersect: false,
-                    backgroundColor: '#1d192b', padding: 12, cornerRadius: 12,
-                    callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` }
-                }
+                tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } }
             },
-            scales: {
-                x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
-                y: { grid: { color: '#f0f0f0' } }
-            }
+            scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } }
         }
     });
 }
@@ -326,12 +331,10 @@ async function loadCustomRange(btn) {
     if (btn) btn.classList.add('active');
 
     let json;
-    try {
-        json = await (await fetch(`/api/history/${_currentMetric}?from=${fromTs}&to=${toTs}`)).json();
-    } catch { return; }
+    try { json = await (await fetch(`/api/history/${_currentMetric}?from=${fromTs}&to=${toTs}`)).json(); } catch { return; }
 
     const diffSec = toTs - fromTs;
-    const labels = json.data.map(d => {
+    const labels  = json.data.map(d => {
         const dt = new Date(d.timestamp * 1000);
         return diffSec > 86400 * 2
             ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
@@ -340,57 +343,25 @@ async function loadCustomRange(btn) {
     const values = json.data.map(d => d.value);
     const color  = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
     const unit   = (METRIC_META[_currentMetric] || {}).unit  || '';
-
-    const ctx = document.getElementById('chart-detail').getContext('2d');
+    const ctx    = document.getElementById('chart-detail').getContext('2d');
     if (_detailChart) _detailChart.destroy();
-
     _detailChart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                data: values,
-                borderColor: color,
-                backgroundColor: color + '1A',
-                fill: true, tension: 0.4, borderWidth: 3,
-                pointRadius: values.length < 60 ? 3 : 0,
-                pointHoverRadius: 6,
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    mode: 'index', intersect: false,
-                    backgroundColor: '#1d192b', padding: 12, cornerRadius: 12,
-                    callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` }
-                }
-            },
-            scales: {
-                x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
-                y: { grid: { color: '#f0f0f0' } }
-            }
-        }
+        data: { labels, datasets: [{ data: values, borderColor: color, backgroundColor: color + '1A', fill: true, tension: 0.4, borderWidth: 3, pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } } }
     });
 }
 
 async function _appendLivePoint() {
     if (!_detailChart || !_currentMetric) return;
     let data;
-    try { data = await (await fetch('/api/current')).json(); }
-    catch { return; }
-
+    try { data = await (await fetch('/api/current')).json(); } catch { return; }
     const m = data.metrics[_currentMetric];
     if (!m) return;
-
     const label = new Date(data.timestamp * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     _detailChart.data.labels.push(label);
     _detailChart.data.datasets[0].data.push(m.value);
-    if (_detailChart.data.labels.length > 200) {
-        _detailChart.data.labels.shift();
-        _detailChart.data.datasets[0].data.shift();
-    }
+    if (_detailChart.data.labels.length > 200) { _detailChart.data.labels.shift(); _detailChart.data.datasets[0].data.shift(); }
     _detailChart.update('none');
 }
 
@@ -432,27 +403,21 @@ function _initDockerOverview() {
 
 async function _refreshDockerOverview() {
     let data;
-    try { data = await (await fetch('/api/docker/current')).json(); }
-    catch { return; }
-
+    try { data = await (await fetch('/api/docker/current')).json(); } catch { return; }
     const grid = document.getElementById('docker-overview-grid');
     if (!grid) return;
-
     const containers = data.containers || [];
-    if (containers.length === 0) {
+    if (!containers.length) {
         grid.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;grid-column:1/-1;">Keine laufenden Docker-Container gefunden.</p>';
         return;
     }
-
     grid.innerHTML = containers.map(c => {
         const cpu    = c.cpu ? c.cpu.value.toFixed(1) : '–';
         const ram    = c.ram ? c.ram.value.toFixed(0) : '–';
         const cpuPct = c.cpu ? Math.min(c.cpu.value, 100) : 0;
-        const ramMax = 2048;
-        const ramPct = c.ram ? Math.min(c.ram.value / ramMax * 100, 100) : 0;
-        const safeName = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        return `
-<div onclick="navigateTo('docker-container','${safeName}')" class="m3-widget pop" style="cursor:pointer;">
+        const ramPct = c.ram ? Math.min(c.ram.value / 2048 * 100, 100) : 0;
+        const safe   = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `<div onclick="navigateTo('docker-container','${safe}')" class="m3-widget pop" style="cursor:pointer;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
     <span class="widget-label">Container</span>
     <span style="width:8px;height:8px;background:#34d399;border-radius:50%;flex-shrink:0;"></span>
@@ -460,17 +425,11 @@ async function _refreshDockerOverview() {
   <p style="font-size:1rem;font-weight:700;margin:0 0 12px;word-break:break-all;">${c.name}</p>
   <div style="display:flex;flex-direction:column;gap:8px;">
     <div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;">
-        <span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span>
-        <span>${cpu}%</span>
-      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span><span>${cpu}%</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${cpuPct}%;"></div></div>
     </div>
     <div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;">
-        <span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span>
-        <span>${ram} MB</span>
-      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span><span>${ram} MB</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${ramPct}%;background:#3b82f6;"></div></div>
     </div>
   </div>
@@ -484,20 +443,15 @@ function _initDockerContainer(name) {
     _currentDockerContainer = name;
     const titleEl = document.getElementById('docker-container-title');
     if (titleEl) titleEl.textContent = name;
-
     loadDockerRange('1h', document.querySelector('.time-chip.active'));
     _updateDockerLive();
-    _dockerContainerIntervals = [
-        setInterval(_appendDockerLivePoints, 5000),
-        setInterval(_updateDockerLive, 5000),
-    ];
+    _dockerContainerIntervals = [setInterval(_appendDockerLivePoints, 5000), setInterval(_updateDockerLive, 5000)];
 }
 
 async function loadDockerRange(range, btn) {
     if (!_currentDockerContainer) return;
     document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
     if (btn) btn.classList.add('active');
-
     const enc = encodeURIComponent(_currentDockerContainer);
     let cpuJson, ramJson;
     try {
@@ -506,94 +460,29 @@ async function loadDockerRange(range, btn) {
             (await fetch(`/api/docker/history/${enc}?metric=ram&range=${range}`)).json(),
         ]);
     } catch { return; }
-
-    const toLabel = (ts) => {
+    const toLabel = ts => {
         const dt = new Date(ts * 1000);
-        return (range === '7d' || range === '30d')
-            ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
-            : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        return (range === '7d' || range === '30d') ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     };
-
-    const cpuLabels = cpuJson.data.map(d => toLabel(d.timestamp));
-    const cpuValues = cpuJson.data.map(d => d.value);
-    const ramLabels = ramJson.data.map(d => toLabel(d.timestamp));
-    const ramValues = ramJson.data.map(d => d.value);
-
     const cpuCanvas = document.getElementById('chart-docker-cpu');
     const ramCanvas = document.getElementById('chart-docker-ram');
     if (!cpuCanvas || !ramCanvas) return;
-
     if (_dockerCpuChart) _dockerCpuChart.destroy();
     if (_dockerRamChart) _dockerRamChart.destroy();
-
-    const makeOpts = (unit) => ({
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                mode: 'index', intersect: false,
-                backgroundColor: '#1d192b', padding: 12, cornerRadius: 12,
-                callbacks: { label: c => `${c.parsed.y.toFixed(2)} ${unit}` }
-            }
-        },
-        scales: {
-            x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
-            y: { grid: { color: '#f0f0f0' } }
-        }
-    });
-
-    _dockerCpuChart = new Chart(cpuCanvas.getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: cpuLabels,
-            datasets: [{
-                data: cpuValues,
-                borderColor: '#6750a4', backgroundColor: '#6750a41A',
-                fill: true, tension: 0.4, borderWidth: 3,
-                pointRadius: cpuValues.length < 60 ? 3 : 0, pointHoverRadius: 6,
-            }]
-        },
-        options: makeOpts('%')
-    });
-
-    _dockerRamChart = new Chart(ramCanvas.getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: ramLabels,
-            datasets: [{
-                data: ramValues,
-                borderColor: '#3b82f6', backgroundColor: '#3b82f61A',
-                fill: true, tension: 0.4, borderWidth: 3,
-                pointRadius: ramValues.length < 60 ? 3 : 0, pointHoverRadius: 6,
-            }]
-        },
-        options: makeOpts('MB')
-    });
+    const makeOpts = unit => ({ maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: c => `${c.parsed.y.toFixed(2)} ${unit}` } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } } });
+    _dockerCpuChart = new Chart(cpuCanvas.getContext('2d'), { type: 'line', data: { labels: cpuJson.data.map(d => toLabel(d.timestamp)), datasets: [{ data: cpuJson.data.map(d => d.value), borderColor: '#6750a4', backgroundColor: '#6750a41A', fill: true, tension: 0.4, borderWidth: 3, pointRadius: cpuJson.data.length < 60 ? 3 : 0, pointHoverRadius: 6 }] }, options: makeOpts('%') });
+    _dockerRamChart = new Chart(ramCanvas.getContext('2d'), { type: 'line', data: { labels: ramJson.data.map(d => toLabel(d.timestamp)), datasets: [{ data: ramJson.data.map(d => d.value), borderColor: '#3b82f6', backgroundColor: '#3b82f61A', fill: true, tension: 0.4, borderWidth: 3, pointRadius: ramJson.data.length < 60 ? 3 : 0, pointHoverRadius: 6 }] }, options: makeOpts('MB') });
 }
 
 async function _appendDockerLivePoints() {
     if (!_dockerCpuChart || !_dockerRamChart || !_currentDockerContainer) return;
     let data;
-    try { data = await (await fetch('/api/docker/current')).json(); }
-    catch { return; }
-
+    try { data = await (await fetch('/api/docker/current')).json(); } catch { return; }
     const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
     if (!c) return;
-
     const label = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-
-    if (c.cpu) {
-        _dockerCpuChart.data.labels.push(label);
-        _dockerCpuChart.data.datasets[0].data.push(c.cpu.value);
-        if (_dockerCpuChart.data.labels.length > 200) { _dockerCpuChart.data.labels.shift(); _dockerCpuChart.data.datasets[0].data.shift(); }
-        _dockerCpuChart.update('none');
-    }
-    if (c.ram) {
-        _dockerRamChart.data.labels.push(label);
-        _dockerRamChart.data.datasets[0].data.push(c.ram.value);
-        if (_dockerRamChart.data.labels.length > 200) { _dockerRamChart.data.labels.shift(); _dockerRamChart.data.datasets[0].data.shift(); }
-        _dockerRamChart.update('none');
-    }
+    if (c.cpu) { _dockerCpuChart.data.labels.push(label); _dockerCpuChart.data.datasets[0].data.push(c.cpu.value); if (_dockerCpuChart.data.labels.length > 200) { _dockerCpuChart.data.labels.shift(); _dockerCpuChart.data.datasets[0].data.shift(); } _dockerCpuChart.update('none'); }
+    if (c.ram) { _dockerRamChart.data.labels.push(label); _dockerRamChart.data.datasets[0].data.push(c.ram.value); if (_dockerRamChart.data.labels.length > 200) { _dockerRamChart.data.labels.shift(); _dockerRamChart.data.datasets[0].data.shift(); } _dockerRamChart.update('none'); }
 }
 
 async function _updateDockerLive() {
@@ -603,10 +492,129 @@ async function _updateDockerLive() {
         const data = await (await fetch('/api/docker/current')).json();
         const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
         if (!c) { el.textContent = ''; return; }
-        const cpu = c.cpu ? c.cpu.value.toFixed(1) : '–';
-        const ram = c.ram ? c.ram.value.toFixed(0) : '–';
-        el.textContent = `CPU ${cpu}%  ·  RAM ${ram} MB`;
+        el.textContent = `CPU ${c.cpu ? c.cpu.value.toFixed(1) : '–'}%  ·  RAM ${c.ram ? c.ram.value.toFixed(0) : '–'} MB`;
     } catch { el.textContent = ''; }
+}
+
+// ── Cloudflare ─────────────────────────────────────────────────────────────────
+
+let _cfZoneId = null;
+
+function _initCloudflare() {
+    const zoneEl = document.querySelector('[data-cf-zone].active') || document.getElementById('cf-single-zone');
+    _cfZoneId = zoneEl ? (zoneEl.dataset.cfZone || null) : null;
+    if (!_cfZoneId) { showCfSettings(); return; }
+    _loadCfSummary();
+    loadCfRange('24h', document.querySelector('.time-chip.active'));
+    _loadCfTopUrls();
+    _cfInterval = setInterval(_loadCfSummary, 60000);
+}
+
+async function selectCfZone(zoneId, btn) {
+    _cfZoneId = zoneId;
+    document.querySelectorAll('[data-cf-zone]').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    await Promise.all([_loadCfSummary(), _loadCfTopUrls()]);
+    loadCfRange(document.querySelector('.time-chip.active')?.dataset.range || '24h', document.querySelector('.time-chip.active'));
+}
+
+async function _loadCfSummary() {
+    if (!_cfZoneId) return;
+    try {
+        const data = await (await fetch('/api/cf/summary')).json();
+        const z    = (data.zones || []).find(z => z.zone_id === _cfZoneId);
+        if (!z) return;
+        const fmtN = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? Math.round(n/1e3)+'K' : String(n);
+        const fmtB = b => b >= 1e9 ? (b/1e9).toFixed(1)+' GB' : b >= 1e6 ? (b/1e6).toFixed(1)+' MB' : Math.round(b/1e3)+' KB';
+        _setVal('cf-req-today',      fmtN(z.requests));
+        _setVal('cf-bytes-today',    fmtB(z.bytes));
+        _setVal('cf-visitors-today', fmtN(z.visitors));
+        _setVal('cf-threats-today',  fmtN(z.threats));
+    } catch {}
+}
+
+async function loadCfRange(range, btn) {
+    if (!_cfZoneId) return;
+    document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+    if (btn) { btn.classList.add('active'); btn.dataset.range = range; }
+    let json;
+    try { json = await (await fetch(`/api/cf/traffic?zone_id=${_cfZoneId}&range=${range}`)).json(); } catch { return; }
+    const labels = json.data.map(d => {
+        const dt = new Date(d.timestamp * 1000);
+        return (range === '7d' || range === '30d') ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    });
+    const values  = json.data.map(d => d.requests);
+    const canvas  = document.getElementById('chart-cf-requests');
+    if (!canvas) return;
+    if (_cfReqChart) _cfReqChart.destroy();
+    _cfReqChart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets: [{ data: values, borderColor: '#f6821f', backgroundColor: '#f6821f1A', fill: true, tension: 0.4, borderWidth: 3, pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6 }] },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: c => `${c.parsed.y.toLocaleString()} Anfragen` } } },
+            scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } }
+        }
+    });
+}
+
+async function _loadCfTopUrls() {
+    if (!_cfZoneId) return;
+    const el = document.getElementById('cf-top-urls-list');
+    if (!el) return;
+    try {
+        const json = await (await fetch(`/api/cf/top-urls?zone_id=${_cfZoneId}`)).json();
+        const rows = json.data || [];
+        if (!rows.length) { el.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;">Keine Daten – erfordert Cloudflare Pro+ oder Daten werden noch gesammelt.</p>'; return; }
+        const maxReq = rows[0].requests || 1;
+        el.innerHTML = rows.map((r, i) => `
+<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #f3f4f6;">
+  <span style="width:22px;font-size:12px;font-weight:700;opacity:0.3;flex-shrink:0;">${i+1}</span>
+  <div style="flex:1;min-width:0;">
+    <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.host}${r.path}">${r.host ? '<span style="opacity:0.45;font-size:11px;">'+r.host+'</span>' : ''}${r.path}</div>
+    <div style="height:3px;background:#f3f4f6;border-radius:4px;margin-top:4px;"><div style="height:100%;background:#f6821f;border-radius:4px;width:${(r.requests/maxReq*100).toFixed(1)}%;"></div></div>
+  </div>
+  <span style="font-size:13px;font-weight:700;opacity:0.65;flex-shrink:0;white-space:nowrap;">${r.requests.toLocaleString()}</span>
+</div>`).join('');
+    } catch {}
+}
+
+function showCfSettings() {
+    const el = document.getElementById('cf-settings-overlay');
+    if (el) el.style.display = 'flex';
+}
+
+function hideCfSettings() {
+    const el = document.getElementById('cf-settings-overlay');
+    if (el) el.style.display = 'none';
+}
+
+async function saveCfConfig() {
+    const tokenEl = document.getElementById('cf-token');
+    const zoneEl  = document.getElementById('cf-zone-ids');
+    const msgEl   = document.getElementById('cf-setup-msg');
+    if (!tokenEl || !zoneEl) return;
+
+    const token   = tokenEl.value.trim();
+    const zoneIds = zoneEl.value.split(',').map(z => z.trim()).filter(Boolean);
+    if (!token || !zoneIds.length) { if (msgEl) msgEl.textContent = 'Token und Zone ID erforderlich.'; return; }
+    if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'Verbinde…'; }
+
+    try {
+        const r = await (await fetch('/api/cf/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_token: token, zones: zoneIds }),
+        })).json();
+        if (r.ok) {
+            if (msgEl) msgEl.textContent = '✓ Verbunden! Lade neu…';
+            setTimeout(() => navigateTo('cloudflare'), 1200);
+        } else {
+            if (msgEl) { msgEl.style.color = '#ef4444'; msgEl.textContent = r.error || 'Fehler'; }
+        }
+    } catch (e) {
+        if (msgEl) { msgEl.style.color = '#ef4444'; msgEl.textContent = String(e); }
+    }
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -615,7 +623,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const container = document.getElementById('view-container');
     const path      = window.location.pathname.replace(/^\//, '');
 
-    if (path === 'docker') {
+    if (path === 'cloudflare') {
+        try { container.innerHTML = await (await fetch('/view/cloudflare')).text(); } catch { return; }
+        history.replaceState({ view: 'cloudflare', metricType: null }, '', '/cloudflare');
+        _initCloudflare();
+        runIntro('Cloudflare Analytics');
+    } else if (path === 'docker') {
         try { container.innerHTML = await (await fetch('/view/docker')).text(); } catch { return; }
         history.replaceState({ view: 'docker', metricType: null }, '', '/docker');
         _initDockerOverview();

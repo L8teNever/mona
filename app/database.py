@@ -1,6 +1,7 @@
-import sqlite3
+﻿import sqlite3
 import threading
 import time
+from datetime import datetime, timezone
 from app.config import DB_PATH, RANGE_SECONDS
 
 _local = threading.local()
@@ -26,6 +27,27 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_metrics_type_time
             ON metrics (metric_type, timestamp DESC);
+
+        CREATE TABLE IF NOT EXISTS cf_traffic (
+            zone_id   TEXT    NOT NULL,
+            timestamp INTEGER NOT NULL,
+            requests  INTEGER NOT NULL DEFAULT 0,
+            bytes     INTEGER NOT NULL DEFAULT 0,
+            visitors  INTEGER NOT NULL DEFAULT 0,
+            threats   INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (zone_id, timestamp)
+        );
+
+        CREATE TABLE IF NOT EXISTS cf_top_urls (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            zone_id  TEXT    NOT NULL,
+            fetched  INTEGER NOT NULL,
+            host     TEXT    NOT NULL DEFAULT '',
+            path     TEXT    NOT NULL,
+            requests INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_cf_top_urls_zone_fetched
+            ON cf_top_urls (zone_id, fetched DESC);
     """)
     conn.commit()
 
@@ -72,6 +94,8 @@ def get_history_range(metric_type: str, from_ts: int, to_ts: int) -> list:
     return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
 
 
+# ── Docker ────────────────────────────────────────────────────────────────────
+
 def get_docker_current() -> list:
     conn = _conn()
     rows = conn.execute("""
@@ -113,3 +137,81 @@ def get_docker_container_names() -> list:
         (since,),
     ).fetchall()
     return [r["label"] for r in rows]
+
+
+# ── Cloudflare ────────────────────────────────────────────────────────────────
+
+def store_cf_traffic(zone_id: str, rows: list) -> None:
+    conn = _conn()
+    conn.executemany(
+        """INSERT OR REPLACE INTO cf_traffic
+           (zone_id, timestamp, requests, bytes, visitors, threats)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [(zone_id, r["timestamp"], r["requests"], r["bytes"],
+          r.get("visitors", 0), r.get("threats", 0)) for r in rows],
+    )
+    conn.commit()
+
+
+def store_cf_top_urls(zone_id: str, rows: list) -> None:
+    conn = _conn()
+    fetched = int(time.time())
+    conn.execute(
+        "DELETE FROM cf_top_urls WHERE zone_id=? AND fetched < ?",
+        (zone_id, fetched - 7200),
+    )
+    conn.executemany(
+        "INSERT INTO cf_top_urls (zone_id, fetched, host, path, requests) VALUES (?,?,?,?,?)",
+        [(zone_id, fetched, r.get("host", ""), r.get("path", "/"), r.get("requests", 0))
+         for r in rows],
+    )
+    conn.commit()
+
+
+def get_cf_summary(zone_id: str) -> dict:
+    today_start = int(datetime.now(timezone.utc)
+                      .replace(hour=0, minute=0, second=0, microsecond=0)
+                      .timestamp())
+    conn = _conn()
+    row = conn.execute(
+        """SELECT SUM(requests) as r, SUM(bytes) as b,
+                  SUM(visitors) as v, SUM(threats) as t
+           FROM cf_traffic WHERE zone_id=? AND timestamp>=?""",
+        (zone_id, today_start),
+    ).fetchone()
+    return {
+        "requests": int(row["r"] or 0),
+        "bytes":    int(row["b"] or 0),
+        "visitors": int(row["v"] or 0),
+        "threats":  int(row["t"] or 0),
+    }
+
+
+def get_cf_traffic(zone_id: str, range_key: str) -> list:
+    seconds = RANGE_SECONDS.get(range_key, 86400)
+    since   = int(time.time()) - seconds
+    conn    = _conn()
+    rows    = conn.execute(
+        """SELECT timestamp, requests, bytes, visitors, threats
+           FROM cf_traffic WHERE zone_id=? AND timestamp>=?
+           ORDER BY timestamp""",
+        (zone_id, since),
+    ).fetchall()
+    return [{"timestamp": r["timestamp"], "requests": r["requests"],
+             "bytes": r["bytes"], "visitors": r["visitors"], "threats": r["threats"]}
+            for r in rows]
+
+
+def get_cf_top_urls(zone_id: str) -> list:
+    conn = _conn()
+    row  = conn.execute(
+        "SELECT MAX(fetched) as f FROM cf_top_urls WHERE zone_id=?", (zone_id,)
+    ).fetchone()
+    if not row or not row["f"]:
+        return []
+    rows = conn.execute(
+        """SELECT host, path, requests FROM cf_top_urls
+           WHERE zone_id=? AND fetched=? ORDER BY requests DESC""",
+        (zone_id, row["f"]),
+    ).fetchall()
+    return [{"host": r["host"], "path": r["path"], "requests": r["requests"]} for r in rows]

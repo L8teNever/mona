@@ -1,6 +1,6 @@
 ﻿<div class="dashboard-grid">
 
-    <!-- Network widget (2x2) -->
+    <!-- Network (2x2) -->
     <div onclick="navigateTo('detail','net_rx')" class="m3-widget widget-2x2 bg-indigo-50" id="w-net_rx">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label">Netzwerk</span>
@@ -13,7 +13,7 @@
         </div>
     </div>
 
-    <!-- CPU widget (2x2) -->
+    <!-- CPU (2x2) -->
     <div onclick="navigateTo('detail','cpu')" class="m3-widget widget-2x2 bg-white border border-gray-100" id="w-cpu">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label">CPU</span>
@@ -24,7 +24,7 @@
         <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">CPU Auslastung</p>
     </div>
 
-    <!-- RAM widget (2x2) -->
+    <!-- RAM (2x2) -->
     <div onclick="navigateTo('detail','ram')" class="m3-widget widget-2x2 bg-white border border-gray-100" id="w-ram">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label">RAM</span>
@@ -35,7 +35,7 @@
         <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">Arbeitsspeicher</p>
     </div>
 
-    <!-- Disk widget (2x2) -->
+    <!-- Disk (2x2) -->
     <div onclick="navigateTo('detail','disk')" class="m3-widget widget-2x2 bg-zinc-50 border border-gray-100" id="w-disk">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label">Disk</span>
@@ -46,7 +46,7 @@
         <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">Festplattenbelegung</p>
     </div>
 
-    <!-- Temp widget (2x2) -->
+    <!-- Temp (2x2) -->
     <div onclick="navigateTo('detail','temp')" class="m3-widget widget-2x2 bg-orange-50 border border-orange-100/50" id="w-temp">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label" style="color:#9a3412;">Temp</span>
@@ -56,7 +56,7 @@
         <p class="text-[9px] mt-auto text-orange-700 font-medium tracking-tight">CPU Temperatur</p>
     </div>
 
-    <!-- Docker widget (2x2) -->
+    <!-- Docker (2x2) -->
     <div onclick="navigateTo('docker')" class="m3-widget widget-2x2" style="background:#eef2ff;border:1px solid #c7d2fe;" id="w-docker">
         <div class="flex justify-between items-center mb-2">
             <span class="widget-label" style="color:#3730a3;">Docker</span>
@@ -65,6 +65,17 @@
         <div class="text-3xl font-bold text-indigo-900"><span id="widget-docker-count">–</span></div>
         <div id="widget-docker-names" class="text-xs mt-0.5 font-medium" style="opacity:0.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"></div>
         <p class="text-[9px] mt-auto font-medium tracking-tight" style="color:#3730a3;">Container laufend</p>
+    </div>
+
+    <!-- Cloudflare (2x2) -->
+    <div onclick="navigateTo('cloudflare')" class="m3-widget widget-2x2" style="background:#fff7ed;border:1px solid #fdba74;" id="w-cf">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label" style="color:#9a3412;">Cloudflare</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="22" height="14" viewBox="0 0 56 36"><path fill="#f6821f" d="M42.5 14.6c-.3-4.4-4-7.9-8.5-7.9-2 0-3.8.7-5.3 1.8C27.4 5.4 24 3 20 3 13.4 3 8 8.4 8 15c0 .3 0 .6.1.9C4.6 17 2 20 2 23.5c0 4 3.2 7.2 7.2 7.2h24.5c4.1 0 7.5-3.1 7.9-7.1 0 0 .6-5.8.9-9z"/></svg>
+        </div>
+        <div class="text-3xl font-bold text-orange-900"><span id="widget-cf-requests">–</span></div>
+        <div class="text-xs mt-0.5 font-medium" style="opacity:0.4;" id="widget-cf-traffic">–</div>
+        <p class="text-[9px] mt-auto font-medium tracking-tight" style="color:#9a3412;">Anfragen heute</p>
     </div>
 
 </div>

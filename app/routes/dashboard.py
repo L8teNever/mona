@@ -1,5 +1,6 @@
-from flask import Blueprint, render_template, redirect
+﻿from flask import Blueprint, render_template, redirect
 from app.widgets import METRIC_META
+from app import cloudflare
 
 bp = Blueprint("dashboard", __name__)
 
@@ -31,6 +32,16 @@ def view_docker_container(container_name: str):
     return render_template("views/docker_container.html")
 
 
+@bp.get("/view/cloudflare")
+def view_cloudflare():
+    cfg = cloudflare.load_config()
+    return render_template(
+        "views/cloudflare.html",
+        cf_configured=cloudflare.is_configured(),
+        cf_zones=cfg.get("zones", []),
+    )
+
+
 @bp.get("/docker")
 def docker_page():
     return render_template("dashboard.html", metrics=METRIC_META)
@@ -38,6 +49,11 @@ def docker_page():
 
 @bp.get("/docker/<container_name>")
 def docker_container_page(container_name: str):
+    return render_template("dashboard.html", metrics=METRIC_META)
+
+
+@bp.get("/cloudflare")
+def cloudflare_page():
     return render_template("dashboard.html", metrics=METRIC_META)
 
 
