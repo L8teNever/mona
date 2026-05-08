@@ -56,5 +56,15 @@
         <p class="text-[9px] mt-auto text-orange-700 font-medium tracking-tight">CPU Temperatur</p>
     </div>
 
-</div>
+    <!-- Docker widget (2x2) -->
+    <div onclick="navigateTo('docker')" class="m3-widget widget-2x2" style="background:#eef2ff;border:1px solid #c7d2fe;" id="w-docker">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label" style="color:#3730a3;">Docker</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3730a3" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>
+        </div>
+        <div class="text-3xl font-bold text-indigo-900"><span id="widget-docker-count">–</span></div>
+        <div id="widget-docker-names" class="text-xs mt-0.5 font-medium" style="opacity:0.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;"></div>
+        <p class="text-[9px] mt-auto font-medium tracking-tight" style="color:#3730a3;">Container laufend</p>
+    </div>
 
+</div>

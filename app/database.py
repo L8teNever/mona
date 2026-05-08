@@ -70,3 +70,46 @@ def get_history_range(metric_type: str, from_ts: int, to_ts: int) -> list:
         (metric_type, from_ts, to_ts),
     ).fetchall()
     return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
+
+
+def get_docker_current() -> list:
+    conn = _conn()
+    rows = conn.execute("""
+        SELECT metric_type, label, value, unit
+        FROM metrics
+        WHERE metric_type IN ('docker_cpu', 'docker_ram')
+          AND id IN (
+              SELECT MAX(id) FROM metrics
+              WHERE metric_type IN ('docker_cpu', 'docker_ram')
+              GROUP BY metric_type, label
+          )
+    """).fetchall()
+    containers: dict = {}
+    for r in rows:
+        name = r["label"]
+        if name not in containers:
+            containers[name] = {"name": name}
+        key = "cpu" if r["metric_type"] == "docker_cpu" else "ram"
+        containers[name][key] = {"value": r["value"], "unit": r["unit"]}
+    return list(containers.values())
+
+
+def get_docker_history(container_name: str, metric_type: str, range_key: str) -> list:
+    seconds = RANGE_SECONDS.get(range_key, RANGE_SECONDS["1h"])
+    since = int(time.time()) - seconds
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT timestamp, value FROM metrics WHERE metric_type=? AND label=? AND timestamp>=? ORDER BY timestamp",
+        (metric_type, container_name, since),
+    ).fetchall()
+    return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
+
+
+def get_docker_container_names() -> list:
+    since = int(time.time()) - 3600
+    conn = _conn()
+    rows = conn.execute(
+        "SELECT DISTINCT label FROM metrics WHERE metric_type='docker_cpu' AND timestamp>=? ORDER BY label",
+        (since,),
+    ).fetchall()
+    return [r["label"] for r in rows]

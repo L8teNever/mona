@@ -12,8 +12,10 @@ def create_app():
 
     from app.routes.dashboard import bp as dash_bp
     from app.routes.api import bp as api_bp
+    from app.routes.docker_api import bp as docker_api_bp
 
     app.register_blueprint(dash_bp)
     app.register_blueprint(api_bp, url_prefix="/api")
+    app.register_blueprint(docker_api_bp, url_prefix="/api/docker")
 
     return app

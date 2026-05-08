@@ -1,0 +1,32 @@
+﻿<div class="flex flex-wrap items-center justify-between gap-3 mb-8">
+    <div class="flex items-center gap-4">
+        <button onclick="navigateTo('docker')" class="back-btn-icon shadow-sm" aria-label="Zurück">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div>
+            <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;opacity:0.5;margin:0;">Container</p>
+            <h2 id="docker-container-title" class="text-xl md:text-3xl font-bold" style="margin:0;">–</h2>
+            <p id="docker-live-value" class="text-sm opacity-50 mt-0.5"></p>
+        </div>
+    </div>
+    <div class="time-chips">
+        <button class="time-chip active" onclick="loadDockerRange('1h', this)">1 Std.</button>
+        <button class="time-chip" onclick="loadDockerRange('24h', this)">24 Std.</button>
+        <button class="time-chip" onclick="loadDockerRange('7d', this)">7 Tage</button>
+        <button class="time-chip" onclick="loadDockerRange('30d', this)">30 Tage</button>
+    </div>
+</div>
+
+<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm mb-4" style="height:280px;">
+    <p class="widget-label mb-3">CPU Auslastung (%)</p>
+    <div style="height:210px;position:relative;">
+        <canvas id="chart-docker-cpu"></canvas>
+    </div>
+</div>
+
+<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm" style="height:280px;">
+    <p class="widget-label mb-3">RAM Verbrauch (MB)</p>
+    <div style="height:210px;position:relative;">
+        <canvas id="chart-docker-ram"></canvas>
+    </div>
+</div>

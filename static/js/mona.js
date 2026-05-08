@@ -1,4 +1,4 @@
-/* MONA – frontend runtime */
+﻿/* MONA – frontend runtime */
 
 Chart.defaults.font.family = "'Google Sans', sans-serif";
 Chart.defaults.color = '#625b71';
@@ -70,19 +70,30 @@ async function runIntro(welcomeText) {
 
 // ── View router ───────────────────────────────────────────────────────────────
 
-let _currentMetric   = null;
-let _dashInterval    = null;
-let _detailIntervals = [];
-let _netMini         = null;
-let _detailChart     = null;
+let _currentMetric            = null;
+let _currentDockerContainer   = null;
+let _dashInterval             = null;
+let _detailIntervals          = [];
+let _dockerInterval           = null;
+let _dockerContainerIntervals = [];
+let _netMini                  = null;
+let _detailChart              = null;
+let _dockerCpuChart           = null;
+let _dockerRamChart           = null;
 
 function _cleanupAll() {
-    if (_dashInterval)  { clearInterval(_dashInterval);  _dashInterval = null; }
+    if (_dashInterval)   { clearInterval(_dashInterval);   _dashInterval = null; }
+    if (_dockerInterval) { clearInterval(_dockerInterval); _dockerInterval = null; }
     _detailIntervals.forEach(clearInterval);
     _detailIntervals = [];
-    if (_netMini)      { _netMini.destroy();      _netMini = null; }
-    if (_detailChart)  { _detailChart.destroy();  _detailChart = null; }
+    _dockerContainerIntervals.forEach(clearInterval);
+    _dockerContainerIntervals = [];
+    if (_netMini)        { _netMini.destroy();        _netMini = null; }
+    if (_detailChart)    { _detailChart.destroy();    _detailChart = null; }
+    if (_dockerCpuChart) { _dockerCpuChart.destroy(); _dockerCpuChart = null; }
+    if (_dockerRamChart) { _dockerRamChart.destroy(); _dockerRamChart = null; }
     _currentMetric = null;
+    _currentDockerContainer = null;
 }
 
 async function _doNavigate(view, metricType) {
@@ -97,7 +108,11 @@ async function _doNavigate(view, metricType) {
     await new Promise(r => setTimeout(r, 210));
 
     // fetch & inject
-    const url = view === 'dashboard' ? '/view/dashboard' : `/view/detail/${metricType}`;
+    let url;
+    if (view === 'dashboard')             url = '/view/dashboard';
+    else if (view === 'docker')           url = '/view/docker';
+    else if (view === 'docker-container') url = `/view/docker-container/${encodeURIComponent(metricType)}`;
+    else                                  url = `/view/detail/${metricType}`;
     try {
         container.innerHTML = await (await fetch(url)).text();
     } catch { return; }
@@ -111,15 +126,18 @@ async function _doNavigate(view, metricType) {
     container.style.opacity    = '1';
     container.style.transform  = 'translateY(0)';
 
-    if (view === 'dashboard') {
-        _initDashboard();
-    } else {
-        _initDetail(metricType);
-    }
+    if (view === 'dashboard')             _initDashboard();
+    else if (view === 'docker')           _initDockerOverview();
+    else if (view === 'docker-container') _initDockerContainer(metricType);
+    else                                  _initDetail(metricType);
 }
 
 async function navigateTo(view, metricType) {
-    const newUrl = view === 'dashboard' ? '/' : `/${metricType}`;
+    let newUrl;
+    if (view === 'dashboard')             newUrl = '/';
+    else if (view === 'docker')           newUrl = '/docker';
+    else if (view === 'docker-container') newUrl = `/docker/${encodeURIComponent(metricType)}`;
+    else                                  newUrl = `/${metricType}`;
     history.pushState({ view, metricType: metricType || null }, '', newUrl);
     await _doNavigate(view, metricType);
 }
@@ -183,6 +201,15 @@ async function _refreshDashboard() {
         _netMini.data.datasets[0].data.push(m.net_rx.value);
         _netMini.update('none');
     }
+
+    // Docker widget
+    try {
+        const dd = await (await fetch('/api/docker/current')).json();
+        const containers = dd.containers || [];
+        _setVal('widget-docker-count', containers.length);
+        const namesEl = document.getElementById('widget-docker-names');
+        if (namesEl) namesEl.textContent = containers.map(c => c.name).join(' · ') || '–';
+    } catch { /* docker unavailable */ }
 }
 
 function _setVal(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
@@ -395,26 +422,222 @@ async function _updateLiveValue() {
     } catch { el.textContent = ''; }
 }
 
+// ── Docker Overview ────────────────────────────────────────────────────────────
+
+function _initDockerOverview() {
+    document.querySelectorAll('.m3-widget').forEach(w => w.classList.add('pop'));
+    _refreshDockerOverview();
+    _dockerInterval = setInterval(_refreshDockerOverview, 3000);
+}
+
+async function _refreshDockerOverview() {
+    let data;
+    try { data = await (await fetch('/api/docker/current')).json(); }
+    catch { return; }
+
+    const grid = document.getElementById('docker-overview-grid');
+    if (!grid) return;
+
+    const containers = data.containers || [];
+    if (containers.length === 0) {
+        grid.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;grid-column:1/-1;">Keine laufenden Docker-Container gefunden.</p>';
+        return;
+    }
+
+    grid.innerHTML = containers.map(c => {
+        const cpu    = c.cpu ? c.cpu.value.toFixed(1) : '–';
+        const ram    = c.ram ? c.ram.value.toFixed(0) : '–';
+        const cpuPct = c.cpu ? Math.min(c.cpu.value, 100) : 0;
+        const ramMax = 2048;
+        const ramPct = c.ram ? Math.min(c.ram.value / ramMax * 100, 100) : 0;
+        const safeName = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `
+<div onclick="navigateTo('docker-container','${safeName}')" class="m3-widget pop" style="cursor:pointer;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span class="widget-label">Container</span>
+    <span style="width:8px;height:8px;background:#34d399;border-radius:50%;flex-shrink:0;"></span>
+  </div>
+  <p style="font-size:1rem;font-weight:700;margin:0 0 12px;word-break:break-all;">${c.name}</p>
+  <div style="display:flex;flex-direction:column;gap:8px;">
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;">
+        <span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span>
+        <span>${cpu}%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${cpuPct}%;"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;">
+        <span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span>
+        <span>${ram} MB</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${ramPct}%;background:#3b82f6;"></div></div>
+    </div>
+  </div>
+</div>`;
+    }).join('');
+}
+
+// ── Docker Container Detail ────────────────────────────────────────────────────
+
+function _initDockerContainer(name) {
+    _currentDockerContainer = name;
+    const titleEl = document.getElementById('docker-container-title');
+    if (titleEl) titleEl.textContent = name;
+
+    loadDockerRange('1h', document.querySelector('.time-chip.active'));
+    _updateDockerLive();
+    _dockerContainerIntervals = [
+        setInterval(_appendDockerLivePoints, 5000),
+        setInterval(_updateDockerLive, 5000),
+    ];
+}
+
+async function loadDockerRange(range, btn) {
+    if (!_currentDockerContainer) return;
+    document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    const enc = encodeURIComponent(_currentDockerContainer);
+    let cpuJson, ramJson;
+    try {
+        [cpuJson, ramJson] = await Promise.all([
+            (await fetch(`/api/docker/history/${enc}?metric=cpu&range=${range}`)).json(),
+            (await fetch(`/api/docker/history/${enc}?metric=ram&range=${range}`)).json(),
+        ]);
+    } catch { return; }
+
+    const toLabel = (ts) => {
+        const dt = new Date(ts * 1000);
+        return (range === '7d' || range === '30d')
+            ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+            : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const cpuLabels = cpuJson.data.map(d => toLabel(d.timestamp));
+    const cpuValues = cpuJson.data.map(d => d.value);
+    const ramLabels = ramJson.data.map(d => toLabel(d.timestamp));
+    const ramValues = ramJson.data.map(d => d.value);
+
+    const cpuCanvas = document.getElementById('chart-docker-cpu');
+    const ramCanvas = document.getElementById('chart-docker-ram');
+    if (!cpuCanvas || !ramCanvas) return;
+
+    if (_dockerCpuChart) _dockerCpuChart.destroy();
+    if (_dockerRamChart) _dockerRamChart.destroy();
+
+    const makeOpts = (unit) => ({
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                mode: 'index', intersect: false,
+                backgroundColor: '#1d192b', padding: 12, cornerRadius: 12,
+                callbacks: { label: c => `${c.parsed.y.toFixed(2)} ${unit}` }
+            }
+        },
+        scales: {
+            x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } },
+            y: { grid: { color: '#f0f0f0' } }
+        }
+    });
+
+    _dockerCpuChart = new Chart(cpuCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: cpuLabels,
+            datasets: [{
+                data: cpuValues,
+                borderColor: '#6750a4', backgroundColor: '#6750a41A',
+                fill: true, tension: 0.4, borderWidth: 3,
+                pointRadius: cpuValues.length < 60 ? 3 : 0, pointHoverRadius: 6,
+            }]
+        },
+        options: makeOpts('%')
+    });
+
+    _dockerRamChart = new Chart(ramCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: ramLabels,
+            datasets: [{
+                data: ramValues,
+                borderColor: '#3b82f6', backgroundColor: '#3b82f61A',
+                fill: true, tension: 0.4, borderWidth: 3,
+                pointRadius: ramValues.length < 60 ? 3 : 0, pointHoverRadius: 6,
+            }]
+        },
+        options: makeOpts('MB')
+    });
+}
+
+async function _appendDockerLivePoints() {
+    if (!_dockerCpuChart || !_dockerRamChart || !_currentDockerContainer) return;
+    let data;
+    try { data = await (await fetch('/api/docker/current')).json(); }
+    catch { return; }
+
+    const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
+    if (!c) return;
+
+    const label = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+    if (c.cpu) {
+        _dockerCpuChart.data.labels.push(label);
+        _dockerCpuChart.data.datasets[0].data.push(c.cpu.value);
+        if (_dockerCpuChart.data.labels.length > 200) { _dockerCpuChart.data.labels.shift(); _dockerCpuChart.data.datasets[0].data.shift(); }
+        _dockerCpuChart.update('none');
+    }
+    if (c.ram) {
+        _dockerRamChart.data.labels.push(label);
+        _dockerRamChart.data.datasets[0].data.push(c.ram.value);
+        if (_dockerRamChart.data.labels.length > 200) { _dockerRamChart.data.labels.shift(); _dockerRamChart.data.datasets[0].data.shift(); }
+        _dockerRamChart.update('none');
+    }
+}
+
+async function _updateDockerLive() {
+    const el = document.getElementById('docker-live-value');
+    if (!el || !_currentDockerContainer) return;
+    try {
+        const data = await (await fetch('/api/docker/current')).json();
+        const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
+        if (!c) { el.textContent = ''; return; }
+        const cpu = c.cpu ? c.cpu.value.toFixed(1) : '–';
+        const ram = c.ram ? c.ram.value.toFixed(0) : '–';
+        el.textContent = `CPU ${cpu}%  ·  RAM ${ram} MB`;
+    } catch { el.textContent = ''; }
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const container   = document.getElementById('view-container');
-    const path        = window.location.pathname.replace(/^\//, '');
-    const metricInUrl = (METRIC_META && METRIC_META[path]) ? path : null;
+    const container = document.getElementById('view-container');
+    const path      = window.location.pathname.replace(/^\//, '');
 
-    if (metricInUrl) {
-        try {
-            container.innerHTML = await (await fetch(`/view/detail/${metricInUrl}`)).text();
-        } catch { return; }
-        history.replaceState({ view: 'detail', metricType: metricInUrl }, '', `/${metricInUrl}`);
-        _initDetail(metricInUrl);
-        runIntro((METRIC_META[metricInUrl] || {}).label || metricInUrl);
+    if (path === 'docker') {
+        try { container.innerHTML = await (await fetch('/view/docker')).text(); } catch { return; }
+        history.replaceState({ view: 'docker', metricType: null }, '', '/docker');
+        _initDockerOverview();
+        runIntro('Docker Container');
+    } else if (path.startsWith('docker/')) {
+        const name = decodeURIComponent(path.slice('docker/'.length));
+        try { container.innerHTML = await (await fetch(`/view/docker-container/${encodeURIComponent(name)}`)).text(); } catch { return; }
+        history.replaceState({ view: 'docker-container', metricType: name }, '', `/${path}`);
+        _initDockerContainer(name);
+        runIntro(name);
     } else {
-        try {
-            container.innerHTML = await (await fetch('/view/dashboard')).text();
-        } catch { return; }
-        history.replaceState({ view: 'dashboard', metricType: null }, '', '/');
-        _initDashboard();
-        runIntro("Willkommen bei MONA");
+        const metricInUrl = (METRIC_META && METRIC_META[path]) ? path : null;
+        if (metricInUrl) {
+            try { container.innerHTML = await (await fetch(`/view/detail/${metricInUrl}`)).text(); } catch { return; }
+            history.replaceState({ view: 'detail', metricType: metricInUrl }, '', `/${metricInUrl}`);
+            _initDetail(metricInUrl);
+            runIntro((METRIC_META[metricInUrl] || {}).label || metricInUrl);
+        } else {
+            try { container.innerHTML = await (await fetch('/view/dashboard')).text(); } catch { return; }
+            history.replaceState({ view: 'dashboard', metricType: null }, '', '/');
+            _initDashboard();
+            runIntro("Willkommen bei MONA");
+        }
     }
 });
