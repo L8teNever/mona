@@ -1,0 +1,65 @@
+<div class="dashboard-grid">
+
+    <!-- Network widget (4x2) -->
+    <div onclick="navigateTo('detail','net_rx')" class="m3-widget widget-4x2 bg-indigo-50" id="w-net_rx">
+        <div class="flex justify-between items-start">
+            <div>
+                <span class="widget-label">Netzwerk</span>
+                <h2 class="text-2xl font-bold mt-1">
+                    ↓ <span id="widget-net_rx-value">–</span> MB/s &nbsp;
+                    ↑ <span id="widget-net_tx-value">–</span> <span class="text-xs font-normal opacity-40">MB/s</span>
+                </h2>
+            </div>
+            <div class="p-2 bg-white/60 rounded-xl shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6750a4" stroke-width="2"><path d="M12 2v20"/><path d="m19 15-7 7-7-7"/></svg>
+            </div>
+        </div>
+        <div class="chart-container">
+            <canvas id="chart-net-mini"></canvas>
+        </div>
+    </div>
+
+    <!-- CPU widget (2x2) -->
+    <div onclick="navigateTo('detail','cpu')" class="m3-widget widget-2x2 bg-white border border-gray-100" id="w-cpu">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label">CPU</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+        </div>
+        <div class="text-3xl font-bold"><span id="widget-cpu-value">–</span>%</div>
+        <div class="progress-bar"><div id="bar-cpu" class="progress-fill" style="width:0%"></div></div>
+        <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">CPU Auslastung</p>
+    </div>
+
+    <!-- RAM widget (2x2) -->
+    <div onclick="navigateTo('detail','ram')" class="m3-widget widget-2x2 bg-white border border-gray-100" id="w-ram">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label">RAM</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 15h20"/><path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7Z"/></svg>
+        </div>
+        <div class="text-3xl font-bold"><span id="widget-ram-value">–</span><span class="text-sm opacity-30 font-normal"> %</span></div>
+        <div class="progress-bar"><div id="bar-ram" class="progress-fill bg-blue-500" style="width:0%"></div></div>
+        <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">Arbeitsspeicher</p>
+    </div>
+
+    <!-- Disk widget (2x2) -->
+    <div onclick="navigateTo('detail','disk')" class="m3-widget widget-2x2 bg-zinc-50 border border-gray-100" id="w-disk">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label">Disk</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/></svg>
+        </div>
+        <div class="text-3xl font-bold"><span id="widget-disk-value">–</span><span class="text-sm opacity-30 font-normal"> GB</span></div>
+        <div class="progress-bar"><div id="bar-disk" class="progress-fill bg-green-500" style="width:0%"></div></div>
+        <p class="text-[9px] mt-auto opacity-50 font-medium leading-tight">Festplattenbelegung</p>
+    </div>
+
+    <!-- Temp widget (2x2) -->
+    <div onclick="navigateTo('detail','temp')" class="m3-widget widget-2x2 bg-orange-50 border border-orange-100/50" id="w-temp">
+        <div class="flex justify-between items-center mb-2">
+            <span class="widget-label" style="color:#9a3412;">Temp</span>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9a3412" stroke-width="2"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"/></svg>
+        </div>
+        <div class="text-3xl font-bold text-orange-900"><span id="widget-temp-value">–</span>°C</div>
+        <p class="text-[9px] mt-auto text-orange-700 font-medium tracking-tight">CPU Temperatur</p>
+    </div>
+
+</div>

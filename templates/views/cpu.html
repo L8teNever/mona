@@ -1,0 +1,28 @@
+﻿<div class="flex flex-wrap items-center justify-between gap-3 mb-8">
+    <div class="flex items-center gap-4">
+        <button onclick="navigateTo('dashboard')" class="back-btn-icon shadow-sm" aria-label="Zurück">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <div>
+            <h2 id="detail-title" class="text-xl md:text-3xl font-bold">CPU</h2>
+            <p id="live-value" class="text-sm opacity-50 mt-0.5"></p>
+        </div>
+    </div>
+    <div class="time-chips">
+        <button class="time-chip active" onclick="loadRange('1h', this)">1 Std.</button>
+        <button class="time-chip" onclick="loadRange('24h', this)">24 Std.</button>
+        <button class="time-chip" onclick="loadRange('7d', this)">7 Tage</button>
+        <button class="time-chip" onclick="loadRange('30d', this)">30 Tage</button>
+    </div>
+</div>
+<div class="custom-range-row">
+    <span class="widget-label" style="white-space:nowrap">Zeitraum</span>
+    <input type="datetime-local" id="range-from" class="datetime-input">
+    <span class="range-sep">–</span>
+    <input type="datetime-local" id="range-to" class="datetime-input">
+    <button onclick="loadCustomRange(this)" class="range-apply-btn">Anzeigen</button>
+</div>
+<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm" style="height:450px;">
+    <canvas id="chart-detail" data-metric="cpu"></canvas>
+</div>
+
