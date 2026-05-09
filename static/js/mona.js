@@ -591,20 +591,18 @@ function hideCfSettings() {
 
 async function saveCfConfig() {
     const tokenEl = document.getElementById('cf-token');
-    const zoneEl  = document.getElementById('cf-zone-ids');
     const msgEl   = document.getElementById('cf-setup-msg');
-    if (!tokenEl || !zoneEl) return;
+    if (!tokenEl) return;
 
-    const token   = tokenEl.value.trim();
-    const zoneIds = zoneEl.value.split(',').map(z => z.trim()).filter(Boolean);
-    if (!token || !zoneIds.length) { if (msgEl) msgEl.textContent = 'Token und Zone ID erforderlich.'; return; }
+    const token = tokenEl.value.trim();
+    if (!token) { if (msgEl) msgEl.textContent = 'Bitte API Token eingeben.'; return; }
     if (msgEl) { msgEl.style.color = ''; msgEl.textContent = 'Verbinde…'; }
 
     try {
         const r = await (await fetch('/api/cf/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_token: token, zones: zoneIds }),
+            body: JSON.stringify({ api_token: token }),
         })).json();
         if (r.ok) {
             if (msgEl) msgEl.textContent = '✓ Verbunden! Lade neu…';

@@ -20,26 +20,19 @@ def get_config():
 
 @bp.post("/config")
 def save_config():
-    data      = request.json or {}
-    token     = data.get("api_token", "").strip()
-    zones_raw = data.get("zones", [])
+    data  = request.json or {}
+    token = data.get("api_token", "").strip()
 
     if not token:
         return jsonify({"ok": False, "error": "API Token fehlt"}), 400
 
-    zones = []
-    for z in zones_raw:
-        if isinstance(z, str) and z.strip():
-            name = cloudflare.fetch_zone_name(token, z.strip())
-            zones.append({"id": z.strip(), "name": name})
-        elif isinstance(z, dict) and z.get("id"):
-            zones.append({"id": z["id"], "name": z.get("name", z["id"])})
-    if not zones:
-        return jsonify({"ok": False, "error": "Mindestens eine Zone ID erforderlich"}), 400
-
     ok, msg = cloudflare.test_token(token)
     if not ok:
         return jsonify({"ok": False, "error": f"Token ungültig: {msg}"}), 400
+
+    zones = cloudflare.fetch_all_zones(token)
+    if not zones:
+        return jsonify({"ok": False, "error": "Keine Zonen gefunden – prüfe Token-Berechtigungen (Zone → Analytics → Read)"}), 400
 
     cloudflare.save_config(token, zones)
     from app import cf_collector

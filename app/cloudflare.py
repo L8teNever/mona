@@ -52,6 +52,18 @@ def test_token(token: str) -> tuple:
         return False, str(e)
 
 
+def fetch_all_zones(token: str) -> list:
+    """Returns list of {id, name} for all zones accessible by the token."""
+    try:
+        r = _http.get(f"{_REST}/zones?per_page=50", headers=_auth(token), timeout=10)
+        d = r.json()
+        if d.get("success"):
+            return [{"id": z["id"], "name": z["name"]} for z in d.get("result", [])]
+    except Exception:
+        pass
+    return []
+
+
 def fetch_zone_name(token: str, zone_id: str) -> str:
     try:
         r = _http.get(f"{_REST}/zones/{zone_id}", headers=_auth(token), timeout=10)
