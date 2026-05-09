@@ -19,10 +19,12 @@ def docker_current():
                 img_name = c.attrs.get('Config', {}).get('Image', '')
                 if not img_name and getattr(c, "image", None):
                     img_name = c.image.tags[0] if c.image.tags else c.image.short_id
+                project  = c.labels.get('com.docker.compose.project', 'Einzelne Container')
                 info = {
                     "name": c.name,
                     "status": c.status,
-                    "image": img_name or "unknown"
+                    "image": img_name or "unknown",
+                    "project": project
                 }
                 if c.name in db_containers:
                     info.update(db_containers[c.name])

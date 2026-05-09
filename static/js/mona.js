@@ -589,40 +589,62 @@ async function _refreshDockerOverview() {
         }
         return;
     }
-    grid.innerHTML = containers.map(c => {
-        const cpu    = c.cpu && c.cpu.value != null ? c.cpu.value.toFixed(1) : '–';
-        const ram    = c.ram && c.ram.value != null ? c.ram.value.toFixed(0) : '–';
-        const cpuPct = c.cpu && c.cpu.value != null ? Math.min(c.cpu.value, 100) : 0;
-        const ramPct = c.ram && c.ram.value != null ? Math.min(c.ram.value / 2048 * 100, 100) : 0;
-        const safe   = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        const isRunning = c.status === 'running';
-        const dotColor  = isRunning ? '#34d399' : (c.status === 'exited' ? '#ef4444' : '#9ca3af');
-        const imgName   = c.image || 'Unbekanntes Image';
+    const projects = {};
+    containers.forEach(c => {
+        const p = c.project || 'Einzelne Container';
+        if (!projects[p]) projects[p] = [];
+        projects[p].push(c);
+    });
+
+    let html = '';
+    const sortedProjects = Object.keys(projects).sort((a, b) => {
+        if (a === 'Einzelne Container') return 1;
+        if (b === 'Einzelne Container') return -1;
+        return a.localeCompare(b);
+    });
+
+    sortedProjects.forEach(pName => {
+        html += `<div style="grid-column:1/-1;margin-top:24px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
+                    <span style="font-weight:800;font-size:0.75rem;opacity:0.4;letter-spacing:0.08em;text-transform:uppercase;">${pName}</span>
+                    <div style="flex:1;height:1px;background:#f3f4f6;"></div>
+                 </div>`;
         
-        return `<div onclick="navigateTo('docker-container','${safe}')" class="m3-widget pop" style="cursor:pointer;">
-  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
-    <div style="display:flex;flex-direction:column;">
-       <span class="widget-label">Container</span>
-       <span style="font-size:10px;opacity:0.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="${imgName}">${imgName}</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
-       <span style="font-size:10px;font-weight:600;opacity:0.6;text-transform:uppercase;">${c.status || 'unknown'}</span>
-       <span style="width:8px;height:8px;background:${dotColor};border-radius:50%;flex-shrink:0;"></span>
-    </div>
-  </div>
-  <p style="font-size:1rem;font-weight:700;margin:4px 0 12px;word-break:break-all;">${c.name}</p>
-  <div style="display:flex;flex-direction:column;gap:8px;">
-    <div style="opacity:${isRunning ? '1' : '0.3'}">
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span><span>${cpu}%</span></div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${cpuPct}%;"></div></div>
-    </div>
-    <div style="opacity:${isRunning ? '1' : '0.3'}">
-      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span><span>${ram} MB</span></div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${ramPct}%;background:#3b82f6;"></div></div>
-    </div>
-  </div>
-</div>`;
-    }).join('');
+        html += projects[pName].map(c => {
+            const cpu    = c.cpu && c.cpu.value != null ? c.cpu.value.toFixed(1) : '–';
+            const ram    = c.ram && c.ram.value != null ? c.ram.value.toFixed(0) : '–';
+            const cpuPct = c.cpu && c.cpu.value != null ? Math.min(c.cpu.value, 100) : 0;
+            const ramPct = c.ram && c.ram.value != null ? Math.min(c.ram.value / 2048 * 100, 100) : 0;
+            const safe   = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            const isRunning = c.status === 'running';
+            const dotColor  = isRunning ? '#34d399' : (c.status === 'exited' ? '#ef4444' : '#9ca3af');
+            const imgName   = c.image || 'Unbekanntes Image';
+            
+            return `<div onclick="navigateTo('docker-container','${safe}')" class="m3-widget pop" style="cursor:pointer;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+        <div style="display:flex;flex-direction:column;">
+           <span class="widget-label">Container</span>
+           <span style="font-size:10px;opacity:0.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="${imgName}">${imgName}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+           <span style="font-size:10px;font-weight:600;opacity:0.6;text-transform:uppercase;">${c.status || 'unknown'}</span>
+           <span style="width:8px;height:8px;background:${dotColor};border-radius:50%;flex-shrink:0;"></span>
+        </div>
+      </div>
+      <p style="font-size:1rem;font-weight:700;margin:4px 0 12px;word-break:break-all;">${c.name}</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="opacity:${isRunning ? '1' : '0.3'}">
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span><span>${cpu}%</span></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${cpuPct}%;"></div></div>
+        </div>
+        <div style="opacity:${isRunning ? '1' : '0.3'}">
+          <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span><span>${ram} MB</span></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${ramPct}%;background:#3b82f6;"></div></div>
+        </div>
+      </div>
+    </div>`;
+        }).join('');
+    });
+    grid.innerHTML = html;
 }
 
 // ── Docker Container Detail ────────────────────────────────────────────────────
