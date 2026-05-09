@@ -1,4 +1,4 @@
-﻿import sqlite3
+import sqlite3
 import threading
 import time
 from datetime import datetime, timezone
@@ -192,12 +192,20 @@ def get_cf_summary(zone_id: str) -> dict:
                       .replace(hour=0, minute=0, second=0, microsecond=0)
                       .timestamp())
     conn = _conn()
-    row = conn.execute(
-        """SELECT SUM(requests) as r, SUM(bytes) as b,
-                  SUM(visitors) as v, SUM(threats) as t
-           FROM cf_traffic WHERE zone_id=? AND timestamp>=?""",
-        (zone_id, today_start),
-    ).fetchone()
+    if zone_id == "all":
+        row = conn.execute(
+            """SELECT SUM(requests) as r, SUM(bytes) as b,
+                      SUM(visitors) as v, SUM(threats) as t
+               FROM cf_traffic WHERE timestamp>=?""",
+            (today_start,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            """SELECT SUM(requests) as r, SUM(bytes) as b,
+                      SUM(visitors) as v, SUM(threats) as t
+               FROM cf_traffic WHERE zone_id=? AND timestamp>=?""",
+            (zone_id, today_start),
+        ).fetchone()
     return {
         "requests": int(row["r"] or 0),
         "bytes":    int(row["b"] or 0),
@@ -210,12 +218,20 @@ def get_cf_traffic(zone_id: str, range_key: str) -> list:
     seconds = RANGE_SECONDS.get(range_key, 86400)
     since   = int(time.time()) - seconds
     conn    = _conn()
-    rows    = conn.execute(
-        """SELECT timestamp, requests, bytes, visitors, threats
-           FROM cf_traffic WHERE zone_id=? AND timestamp>=?
-           ORDER BY timestamp""",
-        (zone_id, since),
-    ).fetchall()
+    if zone_id == "all":
+        rows = conn.execute(
+            """SELECT timestamp, SUM(requests) as requests, SUM(bytes) as bytes, SUM(visitors) as visitors, SUM(threats) as threats
+               FROM cf_traffic WHERE timestamp>=?
+               GROUP BY timestamp ORDER BY timestamp""",
+            (since,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT timestamp, requests, bytes, visitors, threats
+               FROM cf_traffic WHERE zone_id=? AND timestamp>=?
+               ORDER BY timestamp""",
+            (zone_id, since),
+        ).fetchall()
     return [{"timestamp": r["timestamp"], "requests": r["requests"],
              "bytes": r["bytes"], "visitors": r["visitors"], "threats": r["threats"]}
             for r in rows]
@@ -223,16 +239,28 @@ def get_cf_traffic(zone_id: str, range_key: str) -> list:
 
 def get_cf_top_urls(zone_id: str) -> list:
     conn = _conn()
-    row  = conn.execute(
-        "SELECT MAX(fetched) as f FROM cf_top_urls WHERE zone_id=?", (zone_id,)
-    ).fetchone()
-    if not row or not row["f"]:
-        return []
-    rows = conn.execute(
-        """SELECT host, path, requests FROM cf_top_urls
-           WHERE zone_id=? AND fetched=? ORDER BY requests DESC""",
-        (zone_id, row["f"]),
-    ).fetchall()
+    if zone_id == "all":
+        row  = conn.execute(
+            "SELECT MAX(fetched) as f FROM cf_top_urls"
+        ).fetchone()
+        if not row or not row["f"]:
+            return []
+        rows = conn.execute(
+            """SELECT host, path, SUM(requests) as requests FROM cf_top_urls
+               WHERE fetched=? GROUP BY host, path ORDER BY requests DESC LIMIT 15""",
+            (row["f"],),
+        ).fetchall()
+    else:
+        row  = conn.execute(
+            "SELECT MAX(fetched) as f FROM cf_top_urls WHERE zone_id=?", (zone_id,)
+        ).fetchone()
+        if not row or not row["f"]:
+            return []
+        rows = conn.execute(
+            """SELECT host, path, requests FROM cf_top_urls
+               WHERE zone_id=? AND fetched=? ORDER BY requests DESC LIMIT 15""",
+            (zone_id, row["f"]),
+        ).fetchall()
     return [{"host": r["host"], "path": r["path"], "requests": r["requests"]} for r in rows]
 
 def store_cf_tunnels(account_id: str, tunnels: list, routes_map: dict) -> None:

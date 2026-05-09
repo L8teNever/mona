@@ -8,7 +8,31 @@ bp = Blueprint("docker_api", __name__)
 
 @bp.get("/current")
 def docker_current():
-    return jsonify({"containers": database.get_docker_current()})
+    db_containers = {c["name"]: c for c in database.get_docker_current()}
+    
+    client = _containers_mod._ensure_client()
+    if client is not None:
+        try:
+            result = []
+            for c in client.containers.list(all=True):
+                info = {
+                    "name": c.name,
+                    "status": c.status,
+                    "image": c.image.tags[0] if c.image.tags else c.image.short_id
+                }
+                if c.name in db_containers:
+                    info.update(db_containers[c.name])
+                # Ensure cpu and ram keys exist even if not in db
+                if "cpu" not in info: info["cpu"] = None
+                if "ram" not in info: info["ram"] = None
+                result.append(info)
+            # Sort running first, then by name
+            result.sort(key=lambda x: (0 if x["status"] == "running" else 1, x["name"]))
+            return jsonify({"containers": result})
+        except Exception:
+            pass
+            
+    return jsonify({"containers": list(db_containers.values())})
 
 
 @bp.get("/history/<container_name>")

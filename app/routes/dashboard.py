@@ -1,4 +1,4 @@
-﻿from flask import Blueprint, render_template, redirect
+from flask import Blueprint, render_template, redirect
 from app.widgets import METRIC_META
 from app import cloudflare
 
@@ -35,10 +35,13 @@ def view_docker_container(container_name: str):
 @bp.get("/view/cloudflare")
 def view_cloudflare():
     cfg = cloudflare.load_config()
+    zones = cfg.get("zones", [])
+    if len(zones) > 1:
+        zones.insert(0, {"id": "all", "name": "Alle"})
     return render_template(
         "views/cloudflare.html",
         cf_configured=cloudflare.is_configured(),
-        cf_zones=cfg.get("zones", []),
+        cf_zones=zones,
     )
 
 

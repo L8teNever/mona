@@ -1,4 +1,4 @@
-﻿import threading
+import threading
 from flask import Blueprint, jsonify, request
 from app import cloudflare, database
 from app.config import RANGE_SECONDS
@@ -47,6 +47,12 @@ def summary():
         s = database.get_cf_summary(zone["id"])
         s.update({"zone_id": zone["id"], "zone_name": zone["name"]})
         result.append(s)
+    
+    if len(cfg["zones"]) > 1:
+        s_all = database.get_cf_summary("all")
+        s_all.update({"zone_id": "all", "zone_name": "Alle"})
+        result.insert(0, s_all)
+        
     return jsonify({"configured": True, "zones": result})
 
 

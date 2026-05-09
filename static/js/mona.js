@@ -412,23 +412,33 @@ async function _refreshDockerOverview() {
         return;
     }
     grid.innerHTML = containers.map(c => {
-        const cpu    = c.cpu ? c.cpu.value.toFixed(1) : '–';
-        const ram    = c.ram ? c.ram.value.toFixed(0) : '–';
-        const cpuPct = c.cpu ? Math.min(c.cpu.value, 100) : 0;
-        const ramPct = c.ram ? Math.min(c.ram.value / 2048 * 100, 100) : 0;
+        const cpu    = c.cpu && c.cpu.value != null ? c.cpu.value.toFixed(1) : '–';
+        const ram    = c.ram && c.ram.value != null ? c.ram.value.toFixed(0) : '–';
+        const cpuPct = c.cpu && c.cpu.value != null ? Math.min(c.cpu.value, 100) : 0;
+        const ramPct = c.ram && c.ram.value != null ? Math.min(c.ram.value / 2048 * 100, 100) : 0;
         const safe   = c.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const isRunning = c.status === 'running';
+        const dotColor  = isRunning ? '#34d399' : (c.status === 'exited' ? '#ef4444' : '#9ca3af');
+        const imgName   = c.image || 'Unbekanntes Image';
+        
         return `<div onclick="navigateTo('docker-container','${safe}')" class="m3-widget pop" style="cursor:pointer;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-    <span class="widget-label">Container</span>
-    <span style="width:8px;height:8px;background:#34d399;border-radius:50%;flex-shrink:0;"></span>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+    <div style="display:flex;flex-direction:column;">
+       <span class="widget-label">Container</span>
+       <span style="font-size:10px;opacity:0.45;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="${imgName}">${imgName}</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+       <span style="font-size:10px;font-weight:600;opacity:0.6;text-transform:uppercase;">${c.status || 'unknown'}</span>
+       <span style="width:8px;height:8px;background:${dotColor};border-radius:50%;flex-shrink:0;"></span>
+    </div>
   </div>
-  <p style="font-size:1rem;font-weight:700;margin:0 0 12px;word-break:break-all;">${c.name}</p>
+  <p style="font-size:1rem;font-weight:700;margin:4px 0 12px;word-break:break-all;">${c.name}</p>
   <div style="display:flex;flex-direction:column;gap:8px;">
-    <div>
+    <div style="opacity:${isRunning ? '1' : '0.3'}">
       <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">CPU</span><span>${cpu}%</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${cpuPct}%;"></div></div>
     </div>
-    <div>
+    <div style="opacity:${isRunning ? '1' : '0.3'}">
       <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;margin-bottom:3px;"><span style="opacity:0.5;text-transform:uppercase;letter-spacing:0.05em;">RAM</span><span>${ram} MB</span></div>
       <div class="progress-bar"><div class="progress-fill" style="width:${ramPct}%;background:#3b82f6;"></div></div>
     </div>
@@ -481,8 +491,8 @@ async function _appendDockerLivePoints() {
     const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
     if (!c) return;
     const label = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    if (c.cpu) { _dockerCpuChart.data.labels.push(label); _dockerCpuChart.data.datasets[0].data.push(c.cpu.value); if (_dockerCpuChart.data.labels.length > 200) { _dockerCpuChart.data.labels.shift(); _dockerCpuChart.data.datasets[0].data.shift(); } _dockerCpuChart.update('none'); }
-    if (c.ram) { _dockerRamChart.data.labels.push(label); _dockerRamChart.data.datasets[0].data.push(c.ram.value); if (_dockerRamChart.data.labels.length > 200) { _dockerRamChart.data.labels.shift(); _dockerRamChart.data.datasets[0].data.shift(); } _dockerRamChart.update('none'); }
+    if (c.cpu && c.cpu.value != null) { _dockerCpuChart.data.labels.push(label); _dockerCpuChart.data.datasets[0].data.push(c.cpu.value); if (_dockerCpuChart.data.labels.length > 200) { _dockerCpuChart.data.labels.shift(); _dockerCpuChart.data.datasets[0].data.shift(); } _dockerCpuChart.update('none'); }
+    if (c.ram && c.ram.value != null) { _dockerRamChart.data.labels.push(label); _dockerRamChart.data.datasets[0].data.push(c.ram.value); if (_dockerRamChart.data.labels.length > 200) { _dockerRamChart.data.labels.shift(); _dockerRamChart.data.datasets[0].data.shift(); } _dockerRamChart.update('none'); }
 }
 
 async function _updateDockerLive() {
@@ -492,7 +502,7 @@ async function _updateDockerLive() {
         const data = await (await fetch('/api/docker/current')).json();
         const c = (data.containers || []).find(c => c.name === _currentDockerContainer);
         if (!c) { el.textContent = ''; return; }
-        el.textContent = `CPU ${c.cpu ? c.cpu.value.toFixed(1) : '–'}%  ·  RAM ${c.ram ? c.ram.value.toFixed(0) : '–'} MB`;
+        el.textContent = `Status: ${c.status || 'unknown'}  ·  CPU ${c.cpu && c.cpu.value != null ? c.cpu.value.toFixed(1) : '–'}%  ·  RAM ${c.ram && c.ram.value != null ? c.ram.value.toFixed(0) : '–'} MB`;
     } catch { el.textContent = ''; }
 }
 
