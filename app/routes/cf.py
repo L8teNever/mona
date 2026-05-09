@@ -26,13 +26,9 @@ def save_config():
     if not token:
         return jsonify({"ok": False, "error": "API Token fehlt"}), 400
 
-    ok, msg = cloudflare.test_token(token)
-    if not ok:
-        return jsonify({"ok": False, "error": f"Token ungültig: {msg}"}), 400
-
     zones = cloudflare.fetch_all_zones(token)
     if not zones:
-        return jsonify({"ok": False, "error": "Keine Zonen gefunden – prüfe Token-Berechtigungen (Zone → Analytics → Read)"}), 400
+        return jsonify({"ok": False, "error": "Keine Zonen gefunden – Token ungültig oder fehlende Berechtigung (Zone → Analytics → Read)"}), 400
 
     cloudflare.save_config(token, zones)
     from app import cf_collector
