@@ -44,6 +44,34 @@ def history(metric_type: str):
     })
 
 
+@bp.get("/history-breakdown/<metric_type>")
+def history_breakdown(metric_type: str):
+    if metric_type not in ("cpu", "ram"):
+        return jsonify({"error": "breakdown only available for cpu and ram"}), 400
+
+    range_key = request.args.get("range", "1h")
+    if range_key not in RANGE_SECONDS:
+        range_key = "1h"
+
+    # 1. Total System
+    total_data = database.get_history(metric_type, range_key)
+    
+    # 2. Individual Containers
+    docker_metric = f"docker_{metric_type}"
+    container_names = database.get_docker_container_names()
+    
+    breakdown = {}
+    for name in container_names:
+        breakdown[name] = database.get_docker_history(name, docker_metric, range_key)
+        
+    return jsonify({
+        "metric_type": metric_type,
+        "range": range_key,
+        "total": total_data,
+        "containers": breakdown,
+    })
+
+
 @bp.get("/metrics")
 def metrics_list():
     return jsonify(METRIC_META)

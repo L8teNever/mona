@@ -255,8 +255,20 @@ function _toDatetimeLocal(date) {
 
 function _initDetail(metricType) {
     _currentMetric = metricType;
+    _breakdownMode = false;
     const titleEl = document.getElementById('detail-title');
     if (titleEl) titleEl.textContent = (METRIC_META[metricType] || {}).label || metricType;
+
+    const toggleContainer = document.getElementById('breakdown-toggle-container');
+    if (toggleContainer) {
+        if (metricType === 'cpu' || metricType === 'ram') {
+            toggleContainer.classList.remove('hidden');
+        } else {
+            toggleContainer.classList.add('hidden');
+        }
+    }
+    const toggleBtn = document.getElementById('breakdown-toggle');
+    if (toggleBtn) toggleBtn.classList.remove('active');
 
     const now  = new Date();
     const from = document.getElementById('range-from');
@@ -274,47 +286,130 @@ function _initDetail(metricType) {
     ];
 }
 
+let _breakdownMode = false;
+async function toggleBreakdownMode() {
+    _breakdownMode = !_breakdownMode;
+    const btn = document.getElementById('breakdown-toggle');
+    if (btn) btn.classList.toggle('active', _breakdownMode);
+    
+    // Reload current range
+    const activeChip = document.querySelector('.time-chips .time-chip.active');
+    if (activeChip) {
+        const text = activeChip.textContent;
+        const range = text.includes('Std') ? (text.includes('24') ? '24h' : '1h') : (text.includes('7') ? '7d' : '30d');
+        loadRange(range, activeChip);
+    } else {
+        const applyBtn = document.querySelector('.range-apply-btn.active');
+        if (applyBtn) loadCustomRange(applyBtn);
+    }
+}
+
 async function loadRange(range, btn) {
     if (!_currentMetric) return;
-    document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.time-chips .time-chip').forEach(c => c.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
     let json;
-    try { json = await (await fetch(`/api/history/${_currentMetric}?range=${range}`)).json(); }
+    const url = _breakdownMode 
+        ? `/api/history-breakdown/${_currentMetric}?range=${range}`
+        : `/api/history/${_currentMetric}?range=${range}`;
+
+    try { json = await (await fetch(url)).json(); }
     catch { return; }
 
-    const labels = json.data.map(d => {
-        const dt = new Date(d.timestamp * 1000);
-        return (range === '7d' || range === '30d')
-            ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
-            : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    });
-    const values = json.data.map(d => d.value);
-    const color  = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
-    const unit   = (METRIC_META[_currentMetric] || {}).unit  || '';
-
-    const ctx = document.getElementById('chart-detail').getContext('2d');
+    const unit  = (METRIC_META[_currentMetric] || {}).unit  || '';
+    const color = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
+    const ctx   = document.getElementById('chart-detail').getContext('2d');
     if (_detailChart) _detailChart.destroy();
 
-    _detailChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                data: values, borderColor: color, backgroundColor: color + '1A',
-                fill: true, tension: 0.4, borderWidth: 3,
-                pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6,
-            }]
-        },
-        options: {
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } }
+    if (!_breakdownMode) {
+        const labels = json.data.map(d => {
+            const dt = new Date(d.timestamp * 1000);
+            return (range === '7d' || range === '30d')
+                ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+                : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        });
+        const values = json.data.map(d => d.value);
+
+        _detailChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Gesamt', data: values, borderColor: color, backgroundColor: color + '1A',
+                    fill: true, tension: 0.4, borderWidth: 3,
+                    pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6,
+                }]
             },
-            scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } }
-        }
-    });
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } }
+                },
+                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' }, beginAtZero: true } }
+            }
+        });
+    } else {
+        // BREAKDOWN MODE (STACKED)
+        const labels = json.total.map(d => {
+            const dt = new Date(d.timestamp * 1000);
+            return (range === '7d' || range === '30d')
+                ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+                : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        });
+
+        // Map timestamps to indices for alignment
+        const tsToIndex = {};
+        json.total.forEach((d, i) => tsToIndex[d.timestamp] = i);
+
+        const datasets = [];
+        const colors = ['#6750a4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+        let colorIdx = 0;
+
+        // Add container datasets
+        Object.keys(json.containers).forEach(name => {
+            const data = Array(json.total.length).fill(0);
+            json.containers[name].forEach(p => {
+                if (tsToIndex[p.timestamp] != null) data[tsToIndex[p.timestamp]] = p.value;
+            });
+            const c = colors[colorIdx++ % colors.length];
+            datasets.push({
+                label: name, data: data, backgroundColor: c + 'CC', borderColor: c,
+                fill: true, tension: 0.4, borderWidth: 1, pointRadius: 0, stack: 'stack0'
+            });
+        });
+
+        // Add "Rest System" dataset
+        const restData = json.total.map((d, i) => {
+            const containerSum = Object.values(json.containers).reduce((acc, list) => {
+                const p = list.find(x => x.timestamp === d.timestamp);
+                return acc + (p ? p.value : 0);
+            }, 0);
+            return Math.max(0, d.value - containerSum);
+        });
+        datasets.push({
+            label: 'System (Andere)', data: restData, backgroundColor: '#9ca3af80', borderColor: '#9ca3af',
+            fill: true, tension: 0.4, borderWidth: 1, pointRadius: 0, stack: 'stack0'
+        });
+
+        _detailChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, font: { size: 11 } } },
+                    tooltip: { backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ${unit}` } }
+                },
+                scales: { 
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, 
+                    y: { stacked: true, grid: { color: '#f0f0f0' }, beginAtZero: true, max: _currentMetric === 'cpu' ? 100 : undefined } 
+                }
+            }
+        });
+    }
 }
 
 async function loadCustomRange(btn) {
@@ -326,30 +421,109 @@ async function loadCustomRange(btn) {
     const toTs   = Math.floor(new Date(toEl.value).getTime() / 1000);
     if (fromTs >= toTs) return;
 
-    document.querySelectorAll('.time-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.time-chips .time-chip').forEach(c => c.classList.remove('active'));
     document.querySelectorAll('.range-apply-btn').forEach(c => c.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
     let json;
-    try { json = await (await fetch(`/api/history/${_currentMetric}?from=${fromTs}&to=${toTs}`)).json(); } catch { return; }
+    const url = _breakdownMode 
+        ? `/api/history-breakdown/${_currentMetric}?from=${fromTs}&to=${toTs}`
+        : `/api/history/${_currentMetric}?from=${fromTs}&to=${toTs}`;
+
+    try { json = await (await fetch(url)).json(); } catch { return; }
+
+    const unit  = (METRIC_META[_currentMetric] || {}).unit  || '';
+    const color = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
+    const ctx   = document.getElementById('chart-detail').getContext('2d');
+    if (_detailChart) _detailChart.destroy();
 
     const diffSec = toTs - fromTs;
-    const labels  = json.data.map(d => {
-        const dt = new Date(d.timestamp * 1000);
-        return diffSec > 86400 * 2
-            ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
-            : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    });
-    const values = json.data.map(d => d.value);
-    const color  = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
-    const unit   = (METRIC_META[_currentMetric] || {}).unit  || '';
-    const ctx    = document.getElementById('chart-detail').getContext('2d');
-    if (_detailChart) _detailChart.destroy();
-    _detailChart = new Chart(ctx, {
-        type: 'line',
-        data: { labels, datasets: [{ data: values, borderColor: color, backgroundColor: color + '1A', fill: true, tension: 0.4, borderWidth: 3, pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6 }] },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } } }, scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' } } } }
-    });
+
+    if (!_breakdownMode) {
+        const labels = json.data.map(d => {
+            const dt = new Date(d.timestamp * 1000);
+            return diffSec > 86400 * 2
+                ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+                : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        });
+        const values = json.data.map(d => d.value);
+
+        _detailChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Gesamt', data: values, borderColor: color, backgroundColor: color + '1A',
+                    fill: true, tension: 0.4, borderWidth: 3,
+                    pointRadius: values.length < 60 ? 3 : 0, pointHoverRadius: 6,
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { mode: 'index', intersect: false, backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.parsed.y.toFixed(2)} ${unit}` } }
+                },
+                scales: { x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, y: { grid: { color: '#f0f0f0' }, beginAtZero: true } }
+            }
+        });
+    } else {
+        // BREAKDOWN MODE (STACKED)
+        const labels = json.total.map(d => {
+            const dt = new Date(d.timestamp * 1000);
+            return diffSec > 86400 * 2
+                ? dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+                : dt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        });
+
+        const tsToIndex = {};
+        json.total.forEach((d, i) => tsToIndex[d.timestamp] = i);
+
+        const datasets = [];
+        const colors = ['#6750a4', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
+        let colorIdx = 0;
+
+        Object.keys(json.containers).forEach(name => {
+            const data = Array(json.total.length).fill(0);
+            json.containers[name].forEach(p => {
+                if (tsToIndex[p.timestamp] != null) data[tsToIndex[p.timestamp]] = p.value;
+            });
+            const c = colors[colorIdx++ % colors.length];
+            datasets.push({
+                label: name, data: data, backgroundColor: c + 'CC', borderColor: c,
+                fill: true, tension: 0.4, borderWidth: 1, pointRadius: 0, stack: 'stack0'
+            });
+        });
+
+        const restData = json.total.map((d, i) => {
+            const containerSum = Object.values(json.containers).reduce((acc, list) => {
+                const p = list.find(x => x.timestamp === d.timestamp);
+                return acc + (p ? p.value : 0);
+            }, 0);
+            return Math.max(0, d.value - containerSum);
+        });
+        datasets.push({
+            label: 'System (Andere)', data: restData, backgroundColor: '#9ca3af80', borderColor: '#9ca3af',
+            fill: true, tension: 0.4, borderWidth: 1, pointRadius: 0, stack: 'stack0'
+        });
+
+        _detailChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, font: { size: 11 } } },
+                    tooltip: { backgroundColor: '#1d192b', padding: 12, cornerRadius: 12, callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)} ${unit}` } }
+                },
+                scales: { 
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 8 } }, 
+                    y: { stacked: true, grid: { color: '#f0f0f0' }, beginAtZero: true, max: _currentMetric === 'cpu' ? 100 : undefined } 
+                }
+            }
+        });
+    }
 }
 
 async function _appendLivePoint() {

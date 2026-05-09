@@ -1,4 +1,4 @@
-﻿<div class="flex flex-wrap items-center justify-between gap-3 mb-8">
+<div class="flex flex-wrap items-center justify-between gap-3 mb-8">
     <div class="flex items-center gap-4">
         <button onclick="navigateTo('dashboard')" class="back-btn-icon shadow-sm" aria-label="Zurück">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
@@ -7,6 +7,12 @@
             <h2 id="detail-title" class="text-xl md:text-3xl font-bold">Details</h2>
             <p id="live-value" class="text-sm opacity-50 mt-0.5"></p>
         </div>
+    </div>
+    <div id="breakdown-toggle-container" class="hidden">
+        <button id="breakdown-toggle" class="time-chip" onclick="toggleBreakdownMode()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:6px;vertical-align:text-bottom;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            Analyse-Modus
+        </button>
     </div>
     <div class="time-chips">
         <button class="time-chip active" onclick="loadRange('1h', this)">1 Std.</button>
