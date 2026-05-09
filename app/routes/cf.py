@@ -30,7 +30,8 @@ def save_config():
     if not zones:
         return jsonify({"ok": False, "error": "Keine Zonen gefunden – Token ungültig oder fehlende Berechtigung (Zone → Analytics → Read)"}), 400
 
-    cloudflare.save_config(token, zones)
+    accounts = cloudflare.fetch_account_ids(token)
+    cloudflare.save_config(token, zones, accounts)
     from app import cf_collector
     threading.Thread(target=cf_collector._poll_once, daemon=True).start()
     return jsonify({"ok": True, "zones": zones})
@@ -64,3 +65,8 @@ def top_urls():
     zone_id = request.args.get("zone_id", "")
     rows    = database.get_cf_top_urls(zone_id)
     return jsonify({"zone_id": zone_id, "data": rows})
+
+@bp.get("/tunnels")
+def tunnels():
+    rows = database.get_cf_tunnels()
+    return jsonify({"tunnels": rows})

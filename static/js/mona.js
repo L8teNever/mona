@@ -1,4 +1,4 @@
-﻿/* MONA – frontend runtime */
+/* MONA – frontend runtime */
 
 Chart.defaults.font.family = "'Google Sans', sans-serif";
 Chart.defaults.color = '#625b71';
@@ -617,6 +617,37 @@ async function saveCfConfig() {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
+
+async function _loadCfTunnels() {
+    const el = document.getElementById('cf-tunnels-list');
+    if (!el) return;
+    try {
+        const data = await (await fetch('/api/cf/tunnels')).json();
+        if (!data.tunnels || !data.tunnels.length) {
+            el.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;">Keine Tunnel gefunden. Token benoetigt <strong>Cloudflare Tunnel:Read</strong> Berechtigung.</p>';
+            return;
+        }
+        el.innerHTML = data.tunnels.map(t => {
+            const active = t.status === 'active' || t.connections > 0;
+            const dot    = active ? '#22c55e' : '#94a3b8';
+            const label  = active ? 'aktiv' : 'inaktiv';
+            const routes = t.routes.length
+                ? t.routes.map(r => '<div style="font-size:11px;color:#64748b;padding:1px 0 1px 16px;">&#8594; ' + r.hostname + '</div>').join('')
+                : '<div style="font-size:11px;color:#94a3b8;padding-left:16px;">keine Routen</div>';
+            const bg  = active ? '#dcfce7' : '#f1f5f9';
+            const fg  = active ? '#166534' : '#64748b';
+            return '<div style="padding:10px 0;border-bottom:1px solid #f1f5f9;">'
+                 + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+                 + '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;display:inline-block;"></span>'
+                 + '<strong style="font-size:0.875rem;">' + t.name + '</strong>'
+                 + '<span style="margin-left:auto;font-size:11px;padding:2px 7px;border-radius:99px;background:' + bg + ';color:' + fg + ';">' + label + '</span>'
+                 + '<span style="font-size:11px;opacity:0.45;">' + t.connections + ' Verb.</span>'
+                 + '</div>' + routes + '</div>';
+        }).join('');
+    } catch (e) {
+        el.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;">Fehler beim Laden der Tunnel.</p>';
+    }
+}
 document.addEventListener('DOMContentLoaded', async () => {
     const container = document.getElementById('view-container');
     const path      = window.location.pathname.replace(/^\//, '');

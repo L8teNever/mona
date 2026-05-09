@@ -18,17 +18,20 @@ def load_config() -> dict:
     zone_str = os.environ.get("CF_ZONE_IDS", "")
     if token and zone_str:
         zones = [{"id": z.strip(), "name": z.strip()} for z in zone_str.split(",") if z.strip()]
-        return {"api_token": token, "zones": zones}
+        return {"api_token": token, "zones": zones, "accounts": []}
     try:
         with open(_CONFIG_PATH) as f:
-            return json.load(f)
+            d = json.load(f)
+            if "accounts" not in d:
+                d["accounts"] = []
+            return d
     except Exception:
-        return {"api_token": "", "zones": []}
+        return {"api_token": "", "zones": [], "accounts": []}
 
 
-def save_config(api_token: str, zones: list) -> None:
+def save_config(api_token: str, zones: list, accounts: list = None) -> None:
     with open(_CONFIG_PATH, "w") as f:
-        json.dump({"api_token": api_token, "zones": zones}, f, indent=2)
+        json.dump({"api_token": api_token, "zones": zones, "accounts": accounts or []}, f, indent=2)
 
 
 def is_configured() -> bool:
@@ -151,3 +154,56 @@ def fetch_top_paths(token: str, zone_id: str, since_hours: int = 24, limit: int 
         ]
     except Exception:
         return []
+
+def fetch_account_ids(token: str) -> list:
+    """Returns list of {id, name} for all accounts accessible by the token."""
+    try:
+        r = _http.get(f"{_REST}/accounts?per_page=50", headers=_auth(token), timeout=10)
+        d = r.json()
+        if d.get("success"):
+            return [{"id": a["id"], "name": a["name"]} for a in d.get("result", [])]
+    except Exception:
+        pass
+    return []
+
+
+def fetch_tunnels(token: str, account_id: str) -> list:
+    """Returns list of {id, name, status, connections} for all non-deleted tunnels."""
+    try:
+        r = _http.get(
+            f"{_REST}/accounts/{account_id}/cfd_tunnel?is_deleted=false&per_page=100",
+            headers=_auth(token), timeout=15,
+        )
+        d = r.json()
+        if d.get("success"):
+            result = []
+            for t in d.get("result", []):
+                active = len([c for c in t.get("connections", [])
+                              if not c.get("is_pending_reconnect", True)])
+                result.append({
+                    "id": t["id"], "name": t["name"],
+                    "status": t.get("status", "inactive"), "connections": active,
+                })
+            return result
+    except Exception:
+        pass
+    return []
+
+
+def fetch_tunnel_config(token: str, account_id: str, tunnel_id: str) -> list:
+    """Returns ingress rules [{hostname, service}] for a tunnel."""
+    try:
+        r = _http.get(
+            f"{_REST}/accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations",
+            headers=_auth(token), timeout=10,
+        )
+        d = r.json()
+        if d.get("success"):
+            ingress = d["result"].get("config", {}).get("ingress", [])
+            return [
+                {"hostname": rule.get("hostname", ""), "service": rule.get("service", "")}
+                for rule in ingress if rule.get("hostname")
+            ]
+    except Exception:
+        pass
+    return []

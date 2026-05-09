@@ -48,6 +48,25 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_cf_top_urls_zone_fetched
             ON cf_top_urls (zone_id, fetched DESC);
+
+        CREATE TABLE IF NOT EXISTS cf_tunnels (
+            tunnel_id   TEXT PRIMARY KEY,
+            account_id  TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'inactive',
+            connections INTEGER NOT NULL DEFAULT 0,
+            fetched     INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS cf_tunnel_routes (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            tunnel_id TEXT NOT NULL,
+            hostname  TEXT NOT NULL,
+            service   TEXT NOT NULL DEFAULT '',
+            fetched   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cf_tunnel_routes
+            ON cf_tunnel_routes (tunnel_id, fetched DESC);
     """)
     conn.commit()
 
@@ -215,3 +234,45 @@ def get_cf_top_urls(zone_id: str) -> list:
         (zone_id, row["f"]),
     ).fetchall()
     return [{"host": r["host"], "path": r["path"], "requests": r["requests"]} for r in rows]
+
+def store_cf_tunnels(account_id: str, tunnels: list, routes_map: dict) -> None:
+    conn    = _conn()
+    fetched = int(time.time())
+    for t in tunnels:
+        conn.execute(
+            """INSERT OR REPLACE INTO cf_tunnels
+               (tunnel_id, account_id, name, status, connections, fetched)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (t["id"], account_id, t["name"], t["status"], t["connections"], fetched),
+        )
+        routes = routes_map.get(t["id"], [])
+        if routes:
+            conn.execute("DELETE FROM cf_tunnel_routes WHERE tunnel_id=?", (t["id"],))
+            conn.executemany(
+                "INSERT INTO cf_tunnel_routes (tunnel_id, hostname, service, fetched) VALUES (?,?,?,?)",
+                [(t["id"], r["hostname"], r.get("service", ""), fetched) for r in routes],
+            )
+    conn.commit()
+
+
+def get_cf_tunnels() -> list:
+    conn    = _conn()
+    tunnels = conn.execute(
+        "SELECT tunnel_id, account_id, name, status, connections, fetched FROM cf_tunnels ORDER BY name"
+    ).fetchall()
+    result = []
+    for t in tunnels:
+        routes = conn.execute(
+            "SELECT hostname, service FROM cf_tunnel_routes WHERE tunnel_id=? ORDER BY hostname",
+            (t["tunnel_id"],),
+        ).fetchall()
+        result.append({
+            "id":          t["tunnel_id"],
+            "account_id":  t["account_id"],
+            "name":        t["name"],
+            "status":      t["status"],
+            "connections": t["connections"],
+            "fetched":     t["fetched"],
+            "routes":      [{"hostname": r["hostname"], "service": r["service"]} for r in routes],
+        })
+    return result
