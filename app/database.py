@@ -93,24 +93,55 @@ def get_current() -> dict:
     return {r["metric_type"]: {"value": r["value"], "unit": r["unit"]} for r in rows}
 
 
+def _get_bucket_size(seconds: int) -> int:
+    if seconds <= 3600:
+        return 1
+    elif seconds <= 86400:
+        return 300  # 5 minutes
+    elif seconds <= 604800:
+        return 3600 # 1 hour
+    else:
+        return 21600 # 6 hours
+
 def get_history(metric_type: str, range_key: str) -> list:
     seconds = RANGE_SECONDS.get(range_key, RANGE_SECONDS["1h"])
     since = int(time.time()) - seconds
+    bucket = _get_bucket_size(seconds)
     conn = _conn()
-    rows = conn.execute(
-        "SELECT timestamp, value FROM metrics WHERE metric_type=? AND timestamp>=? ORDER BY timestamp",
-        (metric_type, since),
-    ).fetchall()
-    return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
+    if bucket > 1:
+        rows = conn.execute(
+            """SELECT (timestamp / ?) * ? as ts, AVG(value) as val
+               FROM metrics 
+               WHERE metric_type=? AND timestamp>=? 
+               GROUP BY ts ORDER BY ts""",
+            (bucket, bucket, metric_type, since),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT timestamp as ts, value as val FROM metrics WHERE metric_type=? AND timestamp>=? ORDER BY timestamp",
+            (metric_type, since),
+        ).fetchall()
+    return [{"timestamp": r["ts"], "value": r["val"]} for r in rows]
 
 
 def get_history_range(metric_type: str, from_ts: int, to_ts: int) -> list:
+    seconds = to_ts - from_ts
+    bucket = _get_bucket_size(seconds)
     conn = _conn()
-    rows = conn.execute(
-        "SELECT timestamp, value FROM metrics WHERE metric_type=? AND timestamp>=? AND timestamp<=? ORDER BY timestamp",
-        (metric_type, from_ts, to_ts),
-    ).fetchall()
-    return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
+    if bucket > 1:
+        rows = conn.execute(
+            """SELECT (timestamp / ?) * ? as ts, AVG(value) as val
+               FROM metrics 
+               WHERE metric_type=? AND timestamp>=? AND timestamp<=? 
+               GROUP BY ts ORDER BY ts""",
+            (bucket, bucket, metric_type, from_ts, to_ts),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT timestamp as ts, value as val FROM metrics WHERE metric_type=? AND timestamp>=? AND timestamp<=? ORDER BY timestamp",
+            (metric_type, from_ts, to_ts),
+        ).fetchall()
+    return [{"timestamp": r["ts"], "value": r["val"]} for r in rows]
 
 
 # ── Docker ────────────────────────────────────────────────────────────────────
@@ -140,12 +171,22 @@ def get_docker_current() -> list:
 def get_docker_history(container_name: str, metric_type: str, range_key: str) -> list:
     seconds = RANGE_SECONDS.get(range_key, RANGE_SECONDS["1h"])
     since = int(time.time()) - seconds
+    bucket = _get_bucket_size(seconds)
     conn = _conn()
-    rows = conn.execute(
-        "SELECT timestamp, value FROM metrics WHERE metric_type=? AND label=? AND timestamp>=? ORDER BY timestamp",
-        (metric_type, container_name, since),
-    ).fetchall()
-    return [{"timestamp": r["timestamp"], "value": r["value"]} for r in rows]
+    if bucket > 1:
+        rows = conn.execute(
+            """SELECT (timestamp / ?) * ? as ts, AVG(value) as val
+               FROM metrics 
+               WHERE metric_type=? AND label=? AND timestamp>=? 
+               GROUP BY ts ORDER BY ts""",
+            (bucket, bucket, metric_type, container_name, since),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT timestamp as ts, value as val FROM metrics WHERE metric_type=? AND label=? AND timestamp>=? ORDER BY timestamp",
+            (metric_type, container_name, since),
+        ).fetchall()
+    return [{"timestamp": r["ts"], "value": r["val"]} for r in rows]
 
 
 def get_docker_container_names() -> list:

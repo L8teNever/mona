@@ -15,10 +15,13 @@ def docker_current():
         try:
             result = []
             for c in client.containers.list(all=True):
+                img_name = c.attrs.get('Config', {}).get('Image', '')
+                if not img_name and getattr(c, "image", None):
+                    img_name = c.image.tags[0] if c.image.tags else c.image.short_id
                 info = {
                     "name": c.name,
                     "status": c.status,
-                    "image": c.image.tags[0] if c.image.tags else c.image.short_id
+                    "image": img_name or "unknown"
                 }
                 if c.name in db_containers:
                     info.update(db_containers[c.name])
@@ -29,8 +32,8 @@ def docker_current():
             # Sort running first, then by name
             result.sort(key=lambda x: (0 if x["status"] == "running" else 1, x["name"]))
             return jsonify({"containers": result})
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[docker_api] error listing containers: {e}")
             
     return jsonify({"containers": list(db_containers.values())})
 
