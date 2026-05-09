@@ -290,7 +290,7 @@ let _breakdownMode = false;
 async function toggleBreakdownMode() {
     _breakdownMode = !_breakdownMode;
     const btn = document.getElementById('breakdown-toggle');
-    if (btn) btn.classList.toggle('active', _breakdownMode);
+    if (btn) btn.classList.toggle('analysis-active', _breakdownMode);
     
     // Reload current range
     const activeChip = document.querySelector('.time-chips .time-chip.active');
@@ -316,6 +316,18 @@ async function loadRange(range, btn) {
 
     try { json = await (await fetch(url)).json(); }
     catch { return; }
+
+    const noDataMsg = document.getElementById('no-data-msg');
+    const isDataEmpty = _breakdownMode 
+        ? (!json.total || json.total.length === 0)
+        : (!json.data || json.data.length === 0);
+
+    if (noDataMsg) noDataMsg.style.display = isDataEmpty ? 'flex' : 'none';
+    if (isDataEmpty) {
+        if (_detailChart) _detailChart.destroy();
+        _detailChart = null;
+        return;
+    }
 
     const unit  = (METRIC_META[_currentMetric] || {}).unit  || '';
     const color = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
@@ -431,6 +443,18 @@ async function loadCustomRange(btn) {
         : `/api/history/${_currentMetric}?from=${fromTs}&to=${toTs}`;
 
     try { json = await (await fetch(url)).json(); } catch { return; }
+
+    const noDataMsg = document.getElementById('no-data-msg');
+    const isDataEmpty = _breakdownMode 
+        ? (!json.total || json.total.length === 0)
+        : (!json.data || json.data.length === 0);
+
+    if (noDataMsg) noDataMsg.style.display = isDataEmpty ? 'flex' : 'none';
+    if (isDataEmpty) {
+        if (_detailChart) _detailChart.destroy();
+        _detailChart = null;
+        return;
+    }
 
     const unit  = (METRIC_META[_currentMetric] || {}).unit  || '';
     const color = (METRIC_META[_currentMetric] || {}).color || '#6750a4';
@@ -604,9 +628,9 @@ async function _refreshDockerOverview() {
     });
 
     sortedProjects.forEach(pName => {
-        html += `<div style="grid-column:1/-1;margin-top:24px;margin-bottom:12px;display:flex;align-items:center;gap:12px;">
-                    <span style="font-weight:800;font-size:0.75rem;opacity:0.4;letter-spacing:0.08em;text-transform:uppercase;">${pName}</span>
-                    <div style="flex:1;height:1px;background:#f3f4f6;"></div>
+        html += `<div class="stack-header">
+                    <span>${pName}</span>
+                    <div></div>
                  </div>`;
         
         html += projects[pName].map(c => {

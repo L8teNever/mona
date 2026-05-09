@@ -29,8 +29,14 @@
     <input type="datetime-local" id="range-to" class="datetime-input">
     <button onclick="loadCustomRange(this)" class="range-apply-btn">Anzeigen</button>
 </div>
-<div class="bg-white border border-gray-100 rounded-3xl p-6 shadow-sm" style="height:450px;">
+
+<div class="chart-card" style="height:480px; position:relative;">
     <canvas id="chart-detail"></canvas>
+</div>
+
+<div id="no-data-msg" style="display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; background:rgba(255,255,255,0.8); border-radius:32px; z-index:10;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#6750a4" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.2;margin-bottom:16px;"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+    <p style="font-weight:600; color:#6750a4; opacity:0.6;">Keine Daten für diesen Zeitraum verfügbar</p>
 </div>
 
 
