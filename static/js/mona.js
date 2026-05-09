@@ -408,7 +408,11 @@ async function _refreshDockerOverview() {
     if (!grid) return;
     const containers = data.containers || [];
     if (!containers.length) {
-        grid.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;grid-column:1/-1;">Keine laufenden Docker-Container gefunden.</p>';
+        if (data.error) {
+            grid.innerHTML = `<p style="opacity:0.6;font-size:0.85rem;grid-column:1/-1;color:#ef4444;">Fehler beim Verbinden mit Docker: ${data.error}</p>`;
+        } else {
+            grid.innerHTML = '<p style="opacity:0.4;font-size:0.85rem;grid-column:1/-1;">Keine laufenden Docker-Container gefunden.</p>';
+        }
         return;
     }
     grid.innerHTML = containers.map(c => {

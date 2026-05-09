@@ -11,6 +11,7 @@ def docker_current():
     db_containers = {c["name"]: c for c in database.get_docker_current()}
     
     client = _containers_mod._ensure_client()
+    err = ""
     if client is not None:
         try:
             result = []
@@ -34,8 +35,9 @@ def docker_current():
             return jsonify({"containers": result})
         except Exception as e:
             print(f"[docker_api] error listing containers: {e}")
+            err = str(e)
             
-    return jsonify({"containers": list(db_containers.values())})
+    return jsonify({"containers": list(db_containers.values()), "error": err or _containers_mod.last_error})
 
 
 @bp.get("/history/<container_name>")
