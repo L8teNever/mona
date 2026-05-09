@@ -1,6 +1,9 @@
 import time
 
-METRICS = []
+METRICS = [
+    {"type": "docker_cpu", "label": "Docker CPU", "unit": "%", "color": "#6750a4"},
+    {"type": "docker_ram", "label": "Docker RAM", "unit": "MB", "color": "#3b82f6"},
+]
 
 _client = None
 last_error: str = ""
@@ -51,7 +54,8 @@ def collect() -> list:
 
                 rows.append((ts, 'docker_cpu', round(cpu_pct, 2), '%', c.name))
                 rows.append((ts, 'docker_ram', round(ram_mb, 2), 'MB', c.name))
-            except Exception:
+            except Exception as e:
+                print(f"[containers] Error collecting stats for {c.name}: {e}")
                 pass
     except Exception as e:
         global _client
