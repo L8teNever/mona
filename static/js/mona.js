@@ -259,16 +259,16 @@ function _initDetail(metricType) {
     const titleEl = document.getElementById('detail-title');
     if (titleEl) titleEl.textContent = (METRIC_META[metricType] || {}).label || metricType;
 
-    const toggleContainer = document.getElementById('breakdown-toggle-container');
-    if (toggleContainer) {
-        if (metricType === 'cpu' || metricType === 'ram') {
-            toggleContainer.classList.remove('hidden');
-        } else {
-            toggleContainer.classList.add('hidden');
-        }
-    }
     const toggleBtn = document.getElementById('breakdown-toggle');
-    if (toggleBtn) toggleBtn.classList.remove('active');
+    if (toggleBtn) {
+        if (metricType === 'cpu' || metricType === 'ram') {
+            toggleBtn.style.display = 'inline-flex';
+            toggleBtn.style.alignItems = 'center';
+        } else {
+            toggleBtn.style.display = 'none';
+        }
+        toggleBtn.classList.remove('active');
+    }
 
     const now  = new Date();
     const from = document.getElementById('range-from');

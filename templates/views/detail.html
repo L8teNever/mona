@@ -8,13 +8,12 @@
             <p id="live-value" class="text-sm opacity-50 mt-0.5"></p>
         </div>
     </div>
-    <div id="breakdown-toggle-container" class="hidden">
-        <button id="breakdown-toggle" class="time-chip" onclick="toggleBreakdownMode()">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:6px;vertical-align:text-bottom;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-            Analyse-Modus
-        </button>
-    </div>
+
     <div class="time-chips">
+        <button id="breakdown-toggle" class="time-chip" onclick="toggleBreakdownMode()" style="display:none;margin-right:8px;border-color:#6750a4;color:#6750a4;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;margin-right:6px;vertical-align:text-bottom;"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            Analyse
+        </button>
         <button class="time-chip active" onclick="loadRange('1h', this)">1 Std.</button>
         <button class="time-chip" onclick="loadRange('24h', this)">24 Std.</button>
         <button class="time-chip" onclick="loadRange('7d', this)">7 Tage</button>
